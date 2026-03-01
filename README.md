@@ -30,12 +30,16 @@ cd hacksmc
 Beim ersten Aufruf wird interaktiv konfiguriert:
 
 ```
-Welche Datenbank soll verwendet werden?
-  1) PostgreSQL  (Produktiv-Setup)
-  2) H2          (lokal, kein Server nötig)
+Wie soll HackSMC betrieben werden?
+  1) Entwicklung  — Backend + Frontend direkt starten (kein Build)
+  2) Produktion   — JAR bauen, systemd-Dienste einrichten & starten
 ```
 
-Die Konfiguration wird in `config.env` gespeichert — beim nächsten Start läuft die App direkt.
+**Entwicklungsmodus** fragt danach nach der Datenbank (PostgreSQL oder H2) und startet Backend + Frontend direkt.
+
+**Produktionsmodus** fragt alle nötigen Parameter ab, baut dann automatisch JAR + Frontend, kopiert die Artefakte nach `/opt/hacksmc/`, generiert HAProxy- und Nginx-Konfigurationen und richtet systemd-Dienste ein.
+
+Die Konfiguration wird in `config.env` gespeichert — beim nächsten Start läuft die App direkt ohne Rückfragen.
 
 **Konfiguration zurücksetzen:**
 ```bash
@@ -152,11 +156,22 @@ Werden in `config.env` gespeichert (nicht im Git).
 
 ## Deployment (Produktion)
 
-Systemd-Units und Reverse-Proxy-Konfigurationen liegen unter `infra/`:
+Einfach `./start.sh` ausführen und **Produktion** wählen. Das Skript erledigt automatisch:
 
-```bash
-scripts/apply-infra.sh   # Generiert Configs aus config.env und installiert Units
-```
+1. Backend-JAR bauen (`mvn package`)
+2. Frontend bauen (`npm run build`)
+3. Artefakte nach `/opt/hacksmc/` kopieren
+4. System-User `hacksmc` anlegen
+5. HAProxy- und Nginx-Konfigurationen generieren
+6. systemd-Services installieren und aktivieren
+7. Alle Dienste starten
+
+**Voraussetzungen für Produktion:**
+- `sudo`-Rechte
+- `haproxy`, `nginx` installiert
+- TLS-Zertifikat als `.pem`-Datei vorhanden
+
+Die Infra-Templates liegen unter `infra/`, die generierten Configs werden nicht eingecheckt:
 
 ```
 infra/
@@ -165,4 +180,10 @@ infra/
 └── systemd/
     ├── hacksmc-backend.service
     └── hacksmc-frontend.service
+```
+
+**Logs:**
+```bash
+sudo journalctl -u hacksmc-backend -f
+sudo journalctl -u hacksmc-frontend -f
 ```
