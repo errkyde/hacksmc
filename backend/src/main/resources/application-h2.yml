@@ -1,0 +1,33 @@
+# H2-Profil — embedded In-Memory-Datenbank, kein PostgreSQL nötig
+# Starten mit: ./start.sh --h2
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:hacksmc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Dummy-Defaults damit keine Env-Vars gesetzt werden müssen
+hacksmc:
+  jwt:
+    secret: ${JWT_SECRET:hacksmc-h2-dev-secret-key-minimum-32-chars!}
+    expiration-ms: ${JWT_EXPIRATION_MS:3600000}
+  pfsense:
+    base-url: ${PFSENSE_BASE_URL:https://pfsense.local}
+    api-key: ${PFSENSE_API_KEY:dummy-h2-dev-key}
+    trust-all-certs: ${PFSENSE_TRUST_ALL_CERTS:false}

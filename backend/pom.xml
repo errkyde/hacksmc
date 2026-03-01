@@ -55,6 +55,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- H2 embedded database (optional, for dev without PostgreSQL) -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
