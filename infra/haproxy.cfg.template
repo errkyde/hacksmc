@@ -1,0 +1,61 @@
+global
+    log /dev/log local0
+    maxconn 2000
+    user haproxy
+    group haproxy
+    daemon
+    # TLS tuning
+    ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
+    option  forwardfor
+    option  http-server-close
+    timeout connect  5s
+    timeout client   30s
+    timeout server   30s
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 503 /etc/haproxy/errors/503.http
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+frontend hacksmc_https
+    bind *:${PORT_HAPROXY} ssl crt ${HAPROXY_TLS_CERT}
+    http-request redirect scheme https unless { ssl_fc }
+
+    # Rate limiting — 100 req/10s per IP
+    stick-table type ip size 100k expire 10s store http_req_rate(10s)
+    http-request track-sc0 src
+    http-request deny deny_status 429 if { sc_http_req_rate(0) gt 100 }
+
+    # Security headers
+    http-response set-header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    http-response set-header X-Frame-Options "DENY"
+    http-response set-header X-Content-Type-Options "nosniff"
+
+    # Route API calls to Spring Boot, everything else to Nginx
+    acl is_api path_beg /api/
+    use_backend hacksmc_api  if is_api
+    default_backend hacksmc_frontend
+
+# ── Backends ──────────────────────────────────────────────────────────────────
+backend hacksmc_frontend
+    balance roundrobin
+    option httpchk GET /
+    server nginx 127.0.0.1:${PORT_NGINX} check
+
+backend hacksmc_api
+    balance roundrobin
+    option httpchk GET /api/docs
+    server spring 127.0.0.1:${PORT_BACKEND} check
+
+# ── Stats (internal only) ─────────────────────────────────────────────────────
+listen stats
+    bind 127.0.0.1:${PORT_HAPROXY_STATS}
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats auth admin:${HAPROXY_STATS_PASSWORD}

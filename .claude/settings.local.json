@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(tail:*)",
+      "Bash(which node)",
+      "Bash(apt-get install:*)",
+      "Bash(java:*)",
+      "Bash(pg_ctlcluster 17:*)",
+      "Bash(sudo:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest:*)",
+      "Bash(grep:*)",
+      "Bash(chmod +x:*)",
+      "Bash(npx msw:*)",
+      "Bash(cd /home/phil/pfsmc/backend && mvn compile -q 2>&1)",
+      "Bash(echo JAVA_HOME=$JAVA_HOME:*)",
+      "Bash(JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 mvn compile:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

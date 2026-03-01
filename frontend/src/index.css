@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light mode (default) ── */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 199 89% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 94%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 199 89% 40%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  /* ── Dark mode ── */
+  .dark {
+    --background: 214 40% 5%;
+    --foreground: 210 18% 85%;
+    --card: 214 35% 8%;
+    --card-foreground: 210 18% 85%;
+    --popover: 214 35% 8%;
+    --popover-foreground: 210 18% 85%;
+    --primary: 199 95% 58%;
+    --primary-foreground: 214 40% 5%;
+    --secondary: 214 28% 14%;
+    --secondary-foreground: 210 15% 70%;
+    --muted: 214 28% 12%;
+    --muted-foreground: 210 14% 44%;
+    --accent: 214 28% 14%;
+    --accent-foreground: 210 18% 85%;
+    --destructive: 0 65% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 25% 14%;
+    --input: 214 28% 10%;
+    --ring: 199 95% 58%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+}
+
+/* ── Admin mode — reddish accent ─────────────────────────────────────────── */
+
+.admin-mode {
+  --primary: 0 72% 48%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 0 72% 48%;
+}
+
+.dark .admin-mode {
+  --background: 350 28% 5%;
+  --card: 350 22% 8%;
+  --popover: 350 22% 8%;
+  --primary: 0 80% 63%;
+  --primary-foreground: 350 28% 5%;
+  --ring: 0 80% 63%;
+  --border: 350 20% 13%;
+  --input: 350 22% 9%;
+  --muted: 350 20% 11%;
+}
+
+/* ── Custom utilities ── */
+
+.font-display {
+  font-family: 'Space Mono', monospace;
+}
+
+/* Subtle dot-grid background texture */
+.dot-grid {
+  background-image: radial-gradient(
+    circle,
+    hsl(var(--primary) / 0.07) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+}
+
+/* Pulsing status indicator */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+.pulse-dot {
+  animation: status-pulse 2.2s ease-in-out infinite;
+}
