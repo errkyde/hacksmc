@@ -27,21 +27,14 @@ public class AdminInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (adminPassword == null || adminPassword.isBlank()) return;
 
-        userRepository.findByUsername("admin").ifPresentOrElse(
-            admin -> {
-                admin.setPasswordHash(passwordEncoder.encode(adminPassword));
-                userRepository.save(admin);
-                log.info("Admin password set from ADMIN_PASSWORD env var");
-            },
-            () -> {
-                User admin = new User();
-                admin.setUsername("admin");
-                admin.setPasswordHash(passwordEncoder.encode(adminPassword));
-                admin.setRole("ADMIN");
-                admin.setEnabled(true);
-                userRepository.save(admin);
-                log.info("Admin user created from ADMIN_PASSWORD env var");
-            }
-        );
+        if (userRepository.findByUsername("admin").isEmpty()) {
+            User admin = new User();
+            admin.setUsername("admin");
+            admin.setPasswordHash(passwordEncoder.encode(adminPassword));
+            admin.setRole("ADMIN");
+            admin.setEnabled(true);
+            userRepository.save(admin);
+            log.info("Admin user created with default password");
+        }
     }
 }
