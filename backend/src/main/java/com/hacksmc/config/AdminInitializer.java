@@ -19,7 +19,7 @@ public class AdminInitializer implements ApplicationRunner {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${ADMIN_PASSWORD:}")
+    @Value("${ADMIN_PASSWORD:admin}")
     private String adminPassword;
 
     @Override
