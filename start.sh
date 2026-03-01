@@ -2,12 +2,10 @@
 # =============================================================================
 # start.sh — HackSMC starten oder deployen
 #
-# Erster Aufruf: interaktive Konfiguration → wird in config.env gespeichert
-# Danach:
-#   Dev-Modus  → Backend (Maven) + Frontend (Vite) direkt starten
-#   Prod-Modus → JAR + Frontend bauen, systemd-Dienste installieren & starten
+# Beim Start wird immer gefragt: Entwicklung oder Produktion? (+ DB-Wahl)
+# Secrets (DB-Passwort, JWT, pfSense-Key) werden in config.env gespeichert.
 #
-# Konfiguration zurücksetzen: ./start.sh --reconfigure
+# Secrets zurücksetzen: ./start.sh --reconfigure
 # =============================================================================
 set -euo pipefail
 
@@ -25,49 +23,49 @@ header()  { echo -e "\n${C_BOLD}$*${C_RESET}"; }
 for arg in "$@"; do
   if [[ "$arg" == "--reconfigure" ]]; then
     rm -f "$CONFIG_FILE"
-    echo "Konfiguration zurückgesetzt."
+    echo "Konfiguration (Secrets) zurückgesetzt."
   fi
 done
 
 # ═════════════════════════════════════════════════════════════════════════════
-# ERSTMALIGE KONFIGURATION
+# IMMER: Modus + Datenbank wählen
+# ═════════════════════════════════════════════════════════════════════════════
+echo ""
+echo -e "${C_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
+echo -e "${C_BOLD}  HackSMC — Start${C_RESET}"
+echo -e "${C_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
+echo ""
+echo "Wie soll HackSMC betrieben werden?"
+echo "  1) Entwicklung  — Backend + Frontend direkt starten (kein Build)"
+echo "  2) Produktion   — JAR bauen, systemd-Dienste einrichten & starten"
+echo ""
+read -rp "Auswahl [1/2]: " mode_choice
+[[ "$mode_choice" == "2" ]] && RUN_MODE="prod" || RUN_MODE="dev"
+
+if [[ "$RUN_MODE" == "dev" ]]; then
+  echo ""
+  echo "Welche Datenbank soll verwendet werden?"
+  echo "  1) PostgreSQL  (vorhandener Server)"
+  echo "  2) H2          (lokal, kein Server nötig)"
+  echo ""
+  read -rp "Auswahl [1/2]: " db_choice
+  [[ "$db_choice" == "2" ]] && DB_MODE="h2" || DB_MODE="postgres"
+else
+  DB_MODE="postgres"
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SECRETS: nur beim ersten Mal (oder nach --reconfigure) abfragen
 # ═════════════════════════════════════════════════════════════════════════════
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo ""
   echo -e "${C_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
-  echo -e "${C_BOLD}  HackSMC — Erstkonfiguration${C_RESET}"
+  echo -e "${C_BOLD}  Erstkonfiguration — Secrets${C_RESET}"
   echo -e "${C_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
 
-  # ── Modus ──────────────────────────────────────────────────────────────────
-  echo ""
-  echo "Wie soll HackSMC betrieben werden?"
-  echo "  1) Entwicklung  — Backend + Frontend direkt starten (kein Build)"
-  echo "  2) Produktion   — JAR bauen, systemd-Dienste einrichten & starten"
-  echo ""
-  read -rp "Auswahl [1/2]: " mode_choice
-  [[ "$mode_choice" == "2" ]] && RUN_MODE="prod" || RUN_MODE="dev"
-
-  # ── Datenbank ──────────────────────────────────────────────────────────────
-  if [[ "$RUN_MODE" == "dev" ]]; then
-    echo ""
-    echo "Welche Datenbank soll verwendet werden?"
-    echo "  1) PostgreSQL  (vorhandener Server)"
-    echo "  2) H2          (lokal, kein Server nötig)"
-    echo ""
-    read -rp "Auswahl [1/2]: " db_choice
-    [[ "$db_choice" == "2" ]] && DB_MODE="h2" || DB_MODE="postgres"
-  else
-    DB_MODE="postgres"
-  fi
-
-  # ── Eingaben sammeln ───────────────────────────────────────────────────────
   {
-    echo "RUN_MODE=$RUN_MODE"
-    echo "DB_MODE=$DB_MODE"
-    echo ""
-
     # PostgreSQL-Zugangsdaten
-    if [[ "$DB_MODE" == "postgres" ]]; then
+    if [[ "$DB_MODE" == "postgres" ]] || [[ "$RUN_MODE" == "prod" ]]; then
       header "PostgreSQL"
       read -rp  "  DB_HOST      [localhost]: "  v; echo "DB_HOST=${v:-localhost}"
       read -rp  "  DB_PORT      [5432]:      "  v; echo "PORT_POSTGRES=${v:-5432}"
@@ -118,7 +116,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   } > "$CONFIG_FILE"
 
   echo ""
-  success "Konfiguration gespeichert → config.env"
+  success "Secrets gespeichert → config.env"
   info    "Zurücksetzen mit: ./start.sh --reconfigure"
   echo ""
 fi
@@ -127,9 +125,6 @@ fi
 # KONFIGURATION LADEN
 # ═════════════════════════════════════════════════════════════════════════════
 set -a; source "$CONFIG_FILE"; set +a
-
-RUN_MODE="${RUN_MODE:-dev}"
-DB_MODE="${DB_MODE:-postgres}"
 
 # H2-Defaults
 if [[ "$DB_MODE" == "h2" ]]; then
@@ -158,9 +153,11 @@ if [[ "$RUN_MODE" == "dev" ]]; then
 
   (
     cd "$ROOT_DIR/backend"
-    [[ "$DB_MODE" == "h2" ]] \
-      && mvn spring-boot:run -q -Dspring-boot.run.profiles=h2 \
-      || mvn spring-boot:run -q
+    if [[ "$DB_MODE" == "h2" ]]; then
+      mvn spring-boot:run -q -Dspring-boot.run.profiles=h2
+    else
+      mvn spring-boot:run -q
+    fi
   ) &
   BACKEND_PID=$!
 

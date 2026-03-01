@@ -1,7 +1,7 @@
 -- B2: Audit log for security-relevant events
 CREATE TABLE audit_log (
     id      BIGSERIAL PRIMARY KEY,
-    ts      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ts      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     actor   VARCHAR(64)  NOT NULL,
     action  VARCHAR(64)  NOT NULL,
     target  VARCHAR(255),

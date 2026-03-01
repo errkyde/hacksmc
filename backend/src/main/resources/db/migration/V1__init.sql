@@ -37,8 +37,8 @@ CREATE TABLE nat_rules (
     description      VARCHAR(255),
     pf_sense_rule_id VARCHAR(128),
     status           VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at       TIMESTAMPTZ
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    deleted_at       TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX idx_nat_rules_user     ON nat_rules(user_id);
