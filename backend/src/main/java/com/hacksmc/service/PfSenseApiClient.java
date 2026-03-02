@@ -69,11 +69,11 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
-            throw new PfSenseException(e.getMessage(), e);
+            throw new PfSenseException(humanReadable(e), e);
         }
 
         if (response == null || !response.containsKey("data")) {
-            throw new PfSenseException("Unerwartete Antwort von pfSense", null);
+            throw new PfSenseException("Unerwartete Antwort von pfSense (kein 'data'-Feld)", null);
         }
 
         @SuppressWarnings("unchecked")
@@ -92,8 +92,22 @@ public class PfSenseApiClient {
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
-            throw new PfSenseException(e.getMessage(), e);
+            throw new PfSenseException(humanReadable(e), e);
         }
+    }
+
+    private static String humanReadable(Exception e) {
+        String msg = e.getMessage();
+        if (msg == null) return "Unbekannter Fehler";
+        if (msg.contains("text/html"))
+            return "pfSense hat eine HTML-Seite zurückgegeben – API-Key oder URL prüfen";
+        if (msg.contains("Connection refused"))
+            return "Verbindung abgelehnt – PFSENSE_BASE_URL prüfen";
+        if (msg.contains("UnknownHost") || msg.contains("unknown host"))
+            return "Host nicht erreichbar – PFSENSE_BASE_URL prüfen";
+        if (msg.contains("URI is not absolute") || msg.contains("not absolute"))
+            return "PFSENSE_BASE_URL muss mit https:// beginnen";
+        return msg;
     }
 
     /**
