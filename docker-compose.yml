@@ -45,7 +45,7 @@ services:
       NGINX_PORT: 80
       PORT_BACKEND: ${PORT_BACKEND:-3000}
     ports:
-      - "${NGINX_PORT:-80}:80"
+      - "${BIND_IP:-0.0.0.0}:${NGINX_PORT:-80}:80"
     depends_on:
       - backend
     restart: unless-stopped
