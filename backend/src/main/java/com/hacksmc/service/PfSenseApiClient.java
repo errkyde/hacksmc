@@ -12,6 +12,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -30,7 +31,7 @@ public class PfSenseApiClient {
 
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
+                .defaultHeader("X-API-Key", apiKey)
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE);
 
         if (trustAllCerts) {
@@ -47,24 +48,25 @@ public class PfSenseApiClient {
     public String createNatRule(String destIp, String protocol, int port, String description) {
         log.info("Creating pfSense NAT rule: {}:{}/{} -> {}", destIp, port, protocol, description);
 
-        var body = Map.of(
-                "interface", "wan",
-                "protocol", protocol.toLowerCase(),
-                "src", "any",
-                "srcport", "any",
-                "dst", "any",
-                "dstport", String.valueOf(port),
-                "target", destIp,
-                "local-port", String.valueOf(port),
-                "descr", description,
-                "enabled", true
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("interface", "wan");
+        body.put("ipprotocol", "inet");
+        body.put("protocol", protocol.toLowerCase());
+        body.put("source", "any");
+        body.put("source_port", "any");
+        body.put("destination", "any");
+        body.put("destination_port", String.valueOf(port));
+        body.put("target", destIp);
+        body.put("local_port", String.valueOf(port));
+        body.put("descr", description);
+        body.put("disabled", false);
+        body.put("associated_rule_id", "");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> response;
         try {
             response = restClient.post()
-                    .uri("/api/v1/firewall/nat/port_forward")
+                    .uri("/api/firewall/nat/port_forward")
                     .body(body)
                     .retrieve()
                     .body(Map.class);
@@ -78,7 +80,7 @@ public class PfSenseApiClient {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) response.get("data");
-        return String.valueOf(data.get("id"));
+        return String.valueOf(data.get("tracker"));
     }
 
     /**
@@ -88,7 +90,7 @@ public class PfSenseApiClient {
         log.info("Deleting pfSense NAT rule: {}", pfSenseRuleId);
         try {
             restClient.delete()
-                    .uri("/api/v1/firewall/nat/port_forward?id=" + pfSenseRuleId)
+                    .uri("/api/firewall/nat/port_forward/" + pfSenseRuleId)
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
@@ -125,7 +127,7 @@ public class PfSenseApiClient {
         long start = System.currentTimeMillis();
         try {
             restClient.get()
-                    .uri("/api/v1/system/status")
+                    .uri("/api/system/status")
                     .retrieve()
                     .toBodilessEntity();
             return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start, baseUrl, null);
