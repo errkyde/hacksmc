@@ -90,6 +90,14 @@ public class PfSenseApiClient {
      * Quick connectivity check against pfSense. Returns UP/DOWN with latency.
      */
     public PfSenseStatusResponse checkHealth() {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return new PfSenseStatusResponse("DOWN", null, baseUrl,
+                    "PFSENSE_BASE_URL ist nicht konfiguriert");
+        }
+        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+            return new PfSenseStatusResponse("DOWN", null, baseUrl,
+                    "PFSENSE_BASE_URL muss mit https:// beginnen (aktuell: \"" + baseUrl + "\")");
+        }
         long start = System.currentTimeMillis();
         try {
             restClient.get()
