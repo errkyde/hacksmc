@@ -84,7 +84,11 @@ public class PfSenseApiClient {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) response.get("data");
-        return String.valueOf(data.get("tracker"));
+        Object tracker = data.get("tracker");
+        if (tracker == null) {
+            throw new PfSenseException("pfSense hat keinen tracker zurückgegeben", null);
+        }
+        return String.valueOf(tracker);
     }
 
     /**

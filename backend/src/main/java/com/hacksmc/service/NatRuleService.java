@@ -80,8 +80,9 @@ public class NatRuleService {
             throw new NoSuchElementException("Rule already deleted");
         }
 
-        if (rule.getPfSenseRuleId() != null) {
-            pfSenseApiClient.deleteNatRule(rule.getPfSenseRuleId());
+        String pfSenseRuleId = rule.getPfSenseRuleId();
+        if (pfSenseRuleId != null && !pfSenseRuleId.equals("null") && !pfSenseRuleId.isBlank()) {
+            pfSenseApiClient.deleteNatRule(pfSenseRuleId);
         }
 
         rule.setStatus(NatRuleStatus.DELETED);
