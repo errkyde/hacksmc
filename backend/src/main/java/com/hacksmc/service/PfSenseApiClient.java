@@ -18,11 +18,14 @@ import java.util.Map;
 public class PfSenseApiClient {
 
     private final RestClient restClient;
+    private final String baseUrl;
 
     public PfSenseApiClient(
             @Value("${hacksmc.pfsense.base-url}") String baseUrl,
             @Value("${hacksmc.pfsense.api-key}") String apiKey,
             @Value("${hacksmc.pfsense.trust-all-certs:false}") boolean trustAllCerts) {
+
+        this.baseUrl = baseUrl;
 
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl(baseUrl)
@@ -93,10 +96,10 @@ public class PfSenseApiClient {
                     .uri("/api/v1/system/status")
                     .retrieve()
                     .toBodilessEntity();
-            return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start);
+            return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start, baseUrl, null);
         } catch (Exception e) {
             log.warn("pfSense health check failed: {}", e.getMessage());
-            return new PfSenseStatusResponse("DOWN", null);
+            return new PfSenseStatusResponse("DOWN", null, baseUrl, e.getMessage());
         }
     }
 

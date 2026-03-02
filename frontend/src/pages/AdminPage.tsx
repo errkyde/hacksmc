@@ -12,6 +12,7 @@ import {
   useUpdatePolicy,
   useAdminRules,
   useAuditLog,
+  usePfSenseStatus,
   type AdminUser,
   type HostDto,
   type AdminNatRule,
@@ -46,7 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText, Wifi } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1229,14 +1230,102 @@ function UsersTab() {
   )
 }
 
+// ─── pfSense Tab ───────────────────────────────────────────────────────────────
+
+function PfSenseTab() {
+  const { data, isLoading, isFetching, dataUpdatedAt, refetch } = usePfSenseStatus()
+  const up = data?.status === 'UP'
+  const lastUpdated = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toLocaleString('de-DE')
+    : null
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">pfSense-Verbindung</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {lastUpdated ? `Zuletzt geprüft: ${lastUpdated}` : 'Wird geprüft…'} · automatisch alle 60 s
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refetch()}
+          disabled={isFetching}
+        >
+          <RefreshCw className={cn('h-4 w-4 mr-2', isFetching && 'animate-spin')} />
+          Jetzt testen
+        </Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+        {/* Status */}
+        <div className={cn(
+          'rounded-xl border p-6',
+          isLoading
+            ? 'border-border bg-card'
+            : up
+              ? 'border-emerald-500/30 bg-emerald-500/5'
+              : 'border-red-500/30 bg-red-500/5'
+        )}>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Status</p>
+          <div className="flex items-center gap-2.5">
+            <span className={cn(
+              'w-2.5 h-2.5 rounded-full shrink-0',
+              isLoading ? 'bg-muted-foreground' : up ? 'bg-emerald-400 pulse-dot' : 'bg-red-400'
+            )} />
+            <span className={cn(
+              'text-2xl font-bold font-mono tracking-tight',
+              isLoading ? 'text-muted-foreground' : up ? 'text-emerald-400' : 'text-red-400'
+            )}>
+              {isLoading ? '…' : data?.status ?? '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* Latency */}
+        <div className="rounded-xl border bg-card p-6">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Latenz</p>
+          <span className="text-2xl font-bold font-mono tracking-tight">
+            {isLoading ? '…' : data?.latencyMs != null ? `${data.latencyMs} ms` : '—'}
+          </span>
+          {data?.latencyMs != null && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {data.latencyMs < 100 ? 'gut' : data.latencyMs < 500 ? 'mittel' : 'langsam'}
+            </p>
+          )}
+        </div>
+
+        {/* Endpoint URL */}
+        <div className="rounded-xl border bg-card p-6">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Endpunkt</p>
+          <span className="text-sm font-mono text-foreground break-all leading-relaxed">
+            {data?.url ?? '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* Error detail */}
+      {!isLoading && !up && data?.error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+          <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5">Fehlerdetail</p>
+          <p className="text-sm font-mono text-red-300/80 break-all">{data.error}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'rules' | 'audit'
+type Tab = 'users' | 'rules' | 'audit' | 'pfsense'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'users', label: 'Benutzer', icon: <Users className="h-4 w-4" /> },
   { id: 'rules', label: 'NAT-Regeln', icon: <Network className="h-4 w-4" /> },
   { id: 'audit', label: 'Audit-Log', icon: <ScrollText className="h-4 w-4" /> },
+  { id: 'pfsense', label: 'pfSense', icon: <Wifi className="h-4 w-4" /> },
 ]
 
 export default function AdminPage() {
@@ -1266,6 +1355,7 @@ export default function AdminPage() {
       {activeTab === 'users' && <UsersTab />}
       {activeTab === 'rules' && <NatRulesTab />}
       {activeTab === 'audit' && <AuditLogTab />}
+      {activeTab === 'pfsense' && <PfSenseTab />}
     </Layout>
   )
 }

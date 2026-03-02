@@ -179,6 +179,8 @@ export function useAuditLog() {
 export interface PfSenseStatus {
   status: 'UP' | 'DOWN'
   latencyMs: number | null
+  url: string | null
+  error: string | null
 }
 
 export function usePfSenseStatus() {
