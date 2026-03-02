@@ -11,7 +11,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.net.http.HttpClient;
@@ -144,6 +143,11 @@ public class PfSenseApiClient {
 
     private JdkClientHttpRequestFactory trustAllCertsRequestFactory() {
         try {
+            // java.net.http.HttpClient internally overwrites endpointIdentificationAlgorithm="HTTPS"
+            // in AbstractAsyncSSLConnection regardless of what SSLParameters you set.
+            // The only way to disable hostname verification is this JVM system property.
+            System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
+
             SSLContext sslContext = SSLContext.getInstance("TLS");
             sslContext.init(null, new TrustManager[]{new X509TrustManager() {
                 public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
@@ -151,12 +155,8 @@ public class PfSenseApiClient {
                 public void checkServerTrusted(X509Certificate[] certs, String authType) {}
             }}, null);
 
-            SSLParameters sslParameters = new SSLParameters();
-            sslParameters.setEndpointIdentificationAlgorithm("");
-
             HttpClient httpClient = HttpClient.newBuilder()
                     .sslContext(sslContext)
-                    .sslParameters(sslParameters)
                     .build();
 
             log.warn("pfSense client: trust-all-certs is enabled — use only in development!");
