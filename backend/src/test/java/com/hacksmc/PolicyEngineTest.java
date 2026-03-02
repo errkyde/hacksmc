@@ -3,10 +3,8 @@ package com.hacksmc;
 import com.hacksmc.entity.Host;
 import com.hacksmc.entity.NatRuleStatus;
 import com.hacksmc.entity.Policy;
-import com.hacksmc.entity.User;
 import com.hacksmc.exception.PolicyViolationException;
 import com.hacksmc.repository.NatRuleRepository;
-import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.service.PolicyEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -23,24 +21,19 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class PolicyEngineTest {
 
-    @Mock PolicyRepository policyRepository;
     @Mock NatRuleRepository natRuleRepository;
     @InjectMocks PolicyEngine policyEngine;
 
-    private Host host;
+    private static final Long USER_ID = 1L;
+
     private Policy policy;
 
     @BeforeEach
     void setUp() {
-        User user = new User();
-        user.setId(1L);
-        user.setUsername("phil");
-
-        host = new Host();
+        Host host = new Host();
         host.setId(10L);
         host.setName("minecraft-server");
         host.setIpAddress("192.168.10.50");
-        host.setUser(user);
 
         policy = new Policy();
         policy.setId(1L);
@@ -49,22 +42,20 @@ class PolicyEngineTest {
         policy.setPortRangeMin(25565);
         policy.setPortRangeMax(25565);
         policy.setMaxRules(3);
-
-        when(policyRepository.findByHostId(10L)).thenReturn(Optional.of(policy));
     }
 
     @Test
     void happyPath_validRulePassesAllChecks() {
-        when(natRuleRepository.countByHostIdAndStatus(10L, NatRuleStatus.ACTIVE)).thenReturn(1L);
+        when(natRuleRepository.countByUserIdAndHostIdAndStatus(USER_ID, 10L, NatRuleStatus.ACTIVE)).thenReturn(1L);
+        when(natRuleRepository.existsByPortAndStatusIn(25565, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE))).thenReturn(false);
 
         assertThatNoException().isThrownBy(() ->
-                policyEngine.validateRule(host, "TCP", 25565));
+                policyEngine.validateRule(policy, "TCP", 25565, USER_ID));
     }
 
     @Test
     void rejectsDisallowedProtocol() {
-        // Protocol check throws before the rule-count query is ever reached
-        assertThatThrownBy(() -> policyEngine.validateRule(host, "UDP", 25565))
+        assertThatThrownBy(() -> policyEngine.validateRule(policy, "UDP", 25565, USER_ID))
                 .isInstanceOf(PolicyViolationException.class)
                 .hasMessageContaining("Protocol")
                 .hasMessageContaining("UDP");
@@ -72,8 +63,7 @@ class PolicyEngineTest {
 
     @Test
     void rejectsPortBelowRange() {
-        // Port check throws before the rule-count query is ever reached
-        assertThatThrownBy(() -> policyEngine.validateRule(host, "TCP", 1000))
+        assertThatThrownBy(() -> policyEngine.validateRule(policy, "TCP", 1000, USER_ID))
                 .isInstanceOf(PolicyViolationException.class)
                 .hasMessageContaining("Port")
                 .hasMessageContaining("1000");
@@ -81,43 +71,46 @@ class PolicyEngineTest {
 
     @Test
     void rejectsPortAboveRange() {
-        assertThatThrownBy(() -> policyEngine.validateRule(host, "TCP", 25570))
+        assertThatThrownBy(() -> policyEngine.validateRule(policy, "TCP", 25570, USER_ID))
                 .isInstanceOf(PolicyViolationException.class)
                 .hasMessageContaining("Port");
     }
 
     @Test
     void rejectsWhenMaxRulesReached() {
-        when(natRuleRepository.countByHostIdAndStatus(10L, NatRuleStatus.ACTIVE)).thenReturn(3L);
+        when(natRuleRepository.countByUserIdAndHostIdAndStatus(USER_ID, 10L, NatRuleStatus.ACTIVE)).thenReturn(3L);
 
-        assertThatThrownBy(() -> policyEngine.validateRule(host, "TCP", 25565))
+        assertThatThrownBy(() -> policyEngine.validateRule(policy, "TCP", 25565, USER_ID))
                 .isInstanceOf(PolicyViolationException.class)
                 .hasMessageContaining("Max rule limit");
     }
 
     @Test
-    void rejectsWhenNoPolicyDefined() {
-        when(policyRepository.findByHostId(10L)).thenReturn(Optional.empty());
+    void rejectsWhenPortAlreadyInUse() {
+        when(natRuleRepository.countByUserIdAndHostIdAndStatus(USER_ID, 10L, NatRuleStatus.ACTIVE)).thenReturn(0L);
+        when(natRuleRepository.existsByPortAndStatusIn(25565, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE))).thenReturn(true);
 
-        assertThatThrownBy(() -> policyEngine.validateRule(host, "TCP", 25565))
+        assertThatThrownBy(() -> policyEngine.validateRule(policy, "TCP", 25565, USER_ID))
                 .isInstanceOf(PolicyViolationException.class)
-                .hasMessageContaining("No policy");
+                .hasMessageContaining("already in use");
     }
 
     @Test
     void allowsMultipleProtocols() {
         policy.setAllowedProtocols("TCP,UDP");
-        when(natRuleRepository.countByHostIdAndStatus(10L, NatRuleStatus.ACTIVE)).thenReturn(0L);
+        when(natRuleRepository.countByUserIdAndHostIdAndStatus(USER_ID, 10L, NatRuleStatus.ACTIVE)).thenReturn(0L);
+        when(natRuleRepository.existsByPortAndStatusIn(25565, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE))).thenReturn(false);
 
         assertThatNoException().isThrownBy(() ->
-                policyEngine.validateRule(host, "UDP", 25565));
+                policyEngine.validateRule(policy, "UDP", 25565, USER_ID));
     }
 
     @Test
     void protocolCheckIsCaseInsensitive() {
-        when(natRuleRepository.countByHostIdAndStatus(10L, NatRuleStatus.ACTIVE)).thenReturn(0L);
+        when(natRuleRepository.countByUserIdAndHostIdAndStatus(USER_ID, 10L, NatRuleStatus.ACTIVE)).thenReturn(0L);
+        when(natRuleRepository.existsByPortAndStatusIn(25565, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE))).thenReturn(false);
 
         assertThatNoException().isThrownBy(() ->
-                policyEngine.validateRule(host, "tcp", 25565));
+                policyEngine.validateRule(policy, "tcp", 25565, USER_ID));
     }
 }
