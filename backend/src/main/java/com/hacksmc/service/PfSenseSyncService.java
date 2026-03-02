@@ -38,7 +38,15 @@ public class PfSenseSyncService {
         int updated = 0;
         for (NatRule rule : activeRules) {
             String tracker = rule.getPfSenseRuleId();
-            if (tracker == null || tracker.isBlank() || tracker.equals("null")) continue;
+            if (tracker == null || tracker.isBlank() || tracker.equals("null")) {
+                // Never made it to pfSense — clean up
+                rule.setStatus(NatRuleStatus.DELETED);
+                rule.setDeletedAt(Instant.now());
+                natRuleRepository.save(rule);
+                marked++;
+                log.warn("Sync: Regel {} hat keinen pfSense-Tracker — als DELETED markiert", rule.getId());
+                continue;
+            }
 
             if (!trackerToPosition.containsKey(tracker)) {
                 rule.setStatus(NatRuleStatus.DELETED);
