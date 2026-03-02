@@ -56,7 +56,6 @@ public class PfSenseApiClient {
         body.put("ipprotocol", "inet");
         body.put("protocol", protocol.toLowerCase());
         body.put("source", "any");
-        body.put("source_port", "any");
         body.put("destination", "any");
         body.put("destination_port", String.valueOf(port));
         body.put("target", destIp);
