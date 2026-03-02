@@ -18,6 +18,8 @@ import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -109,6 +111,33 @@ public class PfSenseApiClient {
             log.error("pfSense deleteNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
+    }
+
+    /**
+     * Returns the set of tracker values for all NAT port-forward rules currently in pfSense.
+     */
+    @SuppressWarnings("unchecked")
+    public Set<String> getNatRuleTrackers() {
+        Map<String, Object> response;
+        try {
+            response = restClient.get()
+                    .uri("/api/v2/firewall/nat/port_forwards")
+                    .retrieve()
+                    .body(Map.class);
+        } catch (Exception e) {
+            throw new PfSenseException(humanReadable(e), e);
+        }
+
+        if (response == null || !response.containsKey("data")) {
+            return Set.of();
+        }
+
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) response.get("data");
+        return rules.stream()
+                .map(r -> r.get("tracker"))
+                .filter(t -> t != null)
+                .map(String::valueOf)
+                .collect(Collectors.toSet());
     }
 
     @SuppressWarnings("unchecked")

@@ -24,6 +24,7 @@ export function useNatRules() {
   return useQuery<NatRule[]>({
     queryKey: ['nat-rules'],
     queryFn: () => api.get('/api/nat/rules').then((r) => r.data),
+    refetchInterval: 60 * 1000,
   })
 }
 
