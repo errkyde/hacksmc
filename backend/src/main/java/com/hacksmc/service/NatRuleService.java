@@ -10,16 +10,19 @@ import com.hacksmc.repository.NatRuleRepository;
 import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NatRuleService {
 
     private final NatRuleRepository natRuleRepository;
@@ -29,9 +32,45 @@ public class NatRuleService {
     private final PfSenseApiClient pfSenseApiClient;
     private final AuditLogService auditLogService;
 
+    @Transactional
     public List<NatRule> getRulesForUser(String username) {
         User user = getUser(username);
-        return natRuleRepository.findByUserIdWithHost(user.getId());
+        List<NatRule> rules = natRuleRepository.findByUserIdWithHost(user.getId());
+
+        // Fetch live pfSense state and reconcile before returning
+        try {
+            Map<String, Integer> pfSenseTrackers = pfSenseApiClient.getNatRuleTrackerPositions();
+            for (NatRule rule : rules) {
+                if (rule.getStatus() == NatRuleStatus.DELETED) continue;
+
+                String tracker = rule.getPfSenseRuleId();
+                boolean hasValidTracker = tracker != null && !tracker.isBlank() && !tracker.equals("null");
+
+                if (!hasValidTracker) {
+                    // Never made it to pfSense
+                    rule.setStatus(NatRuleStatus.DELETED);
+                    rule.setDeletedAt(Instant.now());
+                    natRuleRepository.save(rule);
+                } else if (!pfSenseTrackers.containsKey(tracker)) {
+                    // Was in pfSense but is gone now (deleted directly in pfSense WebUI)
+                    rule.setStatus(NatRuleStatus.DELETED);
+                    rule.setDeletedAt(Instant.now());
+                    rule.setPfSensePosition(null);
+                    natRuleRepository.save(rule);
+                } else {
+                    // Still active — update position
+                    Integer pos = pfSenseTrackers.get(tracker);
+                    if (!pos.equals(rule.getPfSensePosition())) {
+                        rule.setPfSensePosition(pos);
+                        natRuleRepository.save(rule);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("pfSense live-check beim GET fehlgeschlagen, zeige DB-Stand: {}", e.getMessage());
+        }
+
+        return rules;
     }
 
     @Transactional
