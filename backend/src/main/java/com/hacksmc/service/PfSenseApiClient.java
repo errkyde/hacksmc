@@ -16,6 +16,7 @@ import javax.net.ssl.X509TrustManager;
 import java.net.http.HttpClient;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -87,18 +88,50 @@ public class PfSenseApiClient {
     }
 
     /**
-     * Deletes a NAT rule from pfSense by its rule ID.
+     * Deletes a NAT rule from pfSense by its tracker value.
+     * pfSense DELETE requires the array index (id), not the tracker.
+     * We first fetch all rules to find the current index for the given tracker.
      */
-    public void deleteNatRule(String pfSenseRuleId) {
-        log.info("Deleting pfSense NAT rule: {}", pfSenseRuleId);
+    public void deleteNatRule(String tracker) {
+        log.info("Deleting pfSense NAT rule with tracker: {}", tracker);
+        int arrayId = findArrayIdByTracker(tracker);
+        log.info("Resolved tracker {} to array id {}", tracker, arrayId);
         try {
             restClient.delete()
-                    .uri("/api/v2/firewall/nat/port_forward?id=" + pfSenseRuleId + "&apply=true")
+                    .uri("/api/v2/firewall/nat/port_forward?id=" + arrayId + "&apply=true")
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
+            log.error("pfSense deleteNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private int findArrayIdByTracker(String tracker) {
+        Map<String, Object> response;
+        try {
+            response = restClient.get()
+                    .uri("/api/v2/firewall/nat/port_forwards")
+                    .retrieve()
+                    .body(Map.class);
+        } catch (Exception e) {
+            log.error("pfSense findArrayIdByTracker failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
+
+        if (response == null || !response.containsKey("data")) {
+            throw new PfSenseException("Unerwartete Antwort von pfSense beim Abrufen der NAT-Regeln", null);
+        }
+
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) response.get("data");
+        for (int i = 0; i < rules.size(); i++) {
+            Object ruleTracker = rules.get(i).get("tracker");
+            if (ruleTracker != null && tracker.equals(String.valueOf(ruleTracker))) {
+                return i;
+            }
+        }
+        throw new PfSenseException("NAT-Regel mit tracker=" + tracker + " nicht in pfSense gefunden", null);
     }
 
     private static String humanReadable(Exception e) {
