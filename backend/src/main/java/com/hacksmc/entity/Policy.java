@@ -1,5 +1,6 @@
 package com.hacksmc.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,13 +14,16 @@ public class Policy {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "host_id", nullable = false)
     private Host host;
 
-    /**
-     * Comma-separated allowed protocols, e.g. "TCP,UDP"
-     */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    /** Comma-separated allowed protocols, e.g. "TCP,UDP" */
     @Column(nullable = false)
     private String allowedProtocols;
 

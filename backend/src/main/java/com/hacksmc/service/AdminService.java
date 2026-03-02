@@ -61,7 +61,7 @@ public class AdminService {
                         u.getId(),
                         u.getUsername(),
                         u.getRole(),
-                        hostRepository.countByUserId(u.getId()),
+                        policyRepository.countByUserId(u.getId()),
                         u.isEnabled()))
                 .toList();
     }
@@ -115,42 +115,22 @@ public class AdminService {
         return pfSenseApiClient.checkHealth();
     }
 
-    // ── Hosts ──────────────────────────────────────────────────────────────────
+    // ── Global Hosts ───────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<HostDto> getHostsForUser(Long userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
-        }
-        return hostRepository.findByUserId(userId).stream()
-                .map(this::toHostDto)
+    public List<HostDto> getAllHosts() {
+        return hostRepository.findAll().stream()
+                .map(h -> toHostDto(h, null))
                 .toList();
     }
 
-    public HostDto createHost(Long userId, CreateHostRequest req) {
-        if (req.portRangeMin() > req.portRangeMax()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "portRangeMin must be ≤ portRangeMax");
-        }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
+    public HostDto createHost(CreateHostRequest req) {
         Host host = new Host();
-        host.setUser(user);
         host.setName(req.name());
         host.setIpAddress(req.ipAddress());
         host.setDescription(req.description());
         host = hostRepository.save(host);
-
-        Policy policy = new Policy();
-        policy.setHost(host);
-        policy.setAllowedProtocols(req.allowedProtocols());
-        policy.setPortRangeMin(req.portRangeMin());
-        policy.setPortRangeMax(req.portRangeMax());
-        policy.setMaxRules(req.maxRules());
-        policyRepository.save(policy);
-
-        return toHostDto(host);
+        return toHostDto(host, null);
     }
 
     public void deleteHost(Long hostId) {
@@ -160,14 +140,55 @@ public class AdminService {
         hostRepository.deleteById(hostId);
     }
 
+    // ── User-Host Assignments ──────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<HostDto> getHostsForUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+        }
+        return policyRepository.findByUserIdWithHost(userId).stream()
+                .map(p -> toHostDto(p.getHost(), p))
+                .toList();
+    }
+
+    public HostDto assignHostToUser(Long userId, Long hostId, AssignHostRequest req) {
+        if (req.portRangeMin() > req.portRangeMax()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "portRangeMin must be ≤ portRangeMax");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        Host host = hostRepository.findById(hostId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host not found"));
+        if (policyRepository.existsByUserIdAndHostId(userId, hostId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Host already assigned to user");
+        }
+
+        Policy policy = new Policy();
+        policy.setUser(user);
+        policy.setHost(host);
+        policy.setAllowedProtocols(req.allowedProtocols());
+        policy.setPortRangeMin(req.portRangeMin());
+        policy.setPortRangeMax(req.portRangeMax());
+        policy.setMaxRules(req.maxRules());
+        policyRepository.save(policy);
+
+        return toHostDto(host, policy);
+    }
+
+    public void unassignHostFromUser(Long userId, Long hostId) {
+        Policy policy = policyRepository.findByUserIdAndHostId(userId, hostId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
+        policyRepository.delete(policy);
+    }
+
     // ── Policies ───────────────────────────────────────────────────────────────
 
-    public PolicyDto updatePolicy(Long hostId, UpdatePolicyRequest req) {
+    public PolicyDto updatePolicy(Long userId, Long hostId, UpdatePolicyRequest req) {
         if (req.portRangeMin() > req.portRangeMax()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "portRangeMin must be ≤ portRangeMax");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "portRangeMin must be ≤ portRangeMax");
         }
-        Policy policy = policyRepository.findByHostId(hostId)
+        Policy policy = policyRepository.findByUserIdAndHostId(userId, hostId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Policy not found"));
         policy.setAllowedProtocols(req.allowedProtocols());
         policy.setPortRangeMin(req.portRangeMin());
@@ -185,11 +206,10 @@ public class AdminService {
 
     private AdminUserResponse toAdminUserResponse(User user) {
         return new AdminUserResponse(user.getId(), user.getUsername(), user.getRole(),
-                hostRepository.countByUserId(user.getId()), user.isEnabled());
+                policyRepository.countByUserId(user.getId()), user.isEnabled());
     }
 
-    private HostDto toHostDto(Host host) {
-        Policy policy = policyRepository.findByHostId(host.getId()).orElse(null);
+    private HostDto toHostDto(Host host, Policy policy) {
         return new HostDto(
                 host.getId(),
                 host.getName(),

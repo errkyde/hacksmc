@@ -35,6 +35,9 @@ export interface CreateHostInput {
   name: string
   ipAddress: string
   description?: string
+}
+
+export interface AssignHostInput {
   allowedProtocols: string
   portRangeMin: number
   portRangeMax: number
@@ -90,7 +93,33 @@ export function useSetUserEnabled() {
   })
 }
 
-// ── Hosts ──────────────────────────────────────────────────────────────────────
+// ── Global Hosts ───────────────────────────────────────────────────────────────
+
+export function useAllHosts() {
+  return useQuery<HostDto[]>({
+    queryKey: ['admin', 'hosts'],
+    queryFn: () => api.get('/api/admin/hosts').then((r) => r.data),
+  })
+}
+
+export function useCreateGlobalHost() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateHostInput) =>
+      api.post<HostDto>('/api/admin/hosts', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'hosts'] }),
+  })
+}
+
+export function useDeleteGlobalHost() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (hostId: number) => api.delete(`/api/admin/hosts/${hostId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'hosts'] }),
+  })
+}
+
+// ── User-Host Assignments ──────────────────────────────────────────────────────
 
 export function useUserHosts(userId: number | null) {
   return useQuery<HostDto[]>({
@@ -100,11 +129,11 @@ export function useUserHosts(userId: number | null) {
   })
 }
 
-export function useCreateHost(userId: number) {
+export function useAssignHost(userId: number) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateHostInput) =>
-      api.post<HostDto>(`/api/admin/users/${userId}/hosts`, data).then((r) => r.data),
+    mutationFn: ({ hostId, data }: { hostId: number; data: AssignHostInput }) =>
+      api.post<HostDto>(`/api/admin/users/${userId}/hosts/${hostId}`, data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'users', userId, 'hosts'] })
       qc.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -112,10 +141,10 @@ export function useCreateHost(userId: number) {
   })
 }
 
-export function useDeleteHost(userId: number) {
+export function useUnassignHost(userId: number) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (hostId: number) => api.delete(`/api/admin/hosts/${hostId}`),
+    mutationFn: (hostId: number) => api.delete(`/api/admin/users/${userId}/hosts/${hostId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'users', userId, 'hosts'] })
       qc.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -127,7 +156,7 @@ export function useUpdatePolicy(userId: number) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ hostId, data }: { hostId: number; data: UpdatePolicyInput }) =>
-      api.put<PolicyDto>(`/api/admin/hosts/${hostId}/policy`, data).then((r) => r.data),
+      api.put<PolicyDto>(`/api/admin/users/${userId}/hosts/${hostId}/policy`, data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users', userId, 'hosts'] }),
   })
 }

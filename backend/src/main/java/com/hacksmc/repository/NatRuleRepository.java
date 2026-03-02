@@ -13,7 +13,7 @@ public interface NatRuleRepository extends JpaRepository<NatRule, Long> {
     List<NatRule> findByUserIdWithHost(@Param("userId") Long userId);
 
     List<NatRule> findByUserIdAndStatus(Long userId, NatRuleStatus status);
-    long countByHostIdAndStatus(Long hostId, NatRuleStatus status);
+    long countByUserIdAndHostIdAndStatus(Long userId, Long hostId, NatRuleStatus status);
     Optional<NatRule> findByIdAndUserId(Long id, Long userId);
 
     /** Globale Port-Belegungsprüfung — unabhängig von Nutzer oder Host */

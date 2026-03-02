@@ -4,9 +4,10 @@ import com.hacksmc.dto.CreateNatRuleRequest;
 import com.hacksmc.entity.Host;
 import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NatRuleStatus;
+import com.hacksmc.entity.Policy;
 import com.hacksmc.entity.User;
-import com.hacksmc.repository.HostRepository;
 import com.hacksmc.repository.NatRuleRepository;
+import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -22,7 +23,7 @@ import java.util.NoSuchElementException;
 public class NatRuleService {
 
     private final NatRuleRepository natRuleRepository;
-    private final HostRepository hostRepository;
+    private final PolicyRepository policyRepository;
     private final UserRepository userRepository;
     private final PolicyEngine policyEngine;
     private final PfSenseApiClient pfSenseApiClient;
@@ -36,11 +37,14 @@ public class NatRuleService {
     @Transactional
     public NatRule createRule(String username, CreateNatRuleRequest request) {
         User user = getUser(username);
-        Host host = hostRepository.findByIdAndUserId(request.hostId(), user.getId())
-                .orElseThrow(() -> new AccessDeniedException("Host not found or not owned by user"));
+
+        // Verify user has a policy (assignment) for this host
+        Policy policy = policyRepository.findByUserIdAndHostId(user.getId(), request.hostId())
+                .orElseThrow(() -> new AccessDeniedException("Host not found or not assigned to user"));
+        Host host = policy.getHost();
 
         // Policy check (throws PolicyViolationException -> 403)
-        policyEngine.validateRule(host, request.protocol(), request.port());
+        policyEngine.validateRule(policy, request.protocol(), request.port(), user.getId());
 
         // Persist as PENDING before calling pfSense
         NatRule rule = new NatRule();

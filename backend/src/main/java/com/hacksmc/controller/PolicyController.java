@@ -20,7 +20,7 @@ public class PolicyController {
     @GetMapping
     public List<Policy> getPolicies(Principal principal) {
         return userRepository.findByUsername(principal.getName())
-                .map(user -> policyRepository.findByHostUserIdWithHost(user.getId()))
+                .map(user -> policyRepository.findByUserIdWithHost(user.getId()))
                 .orElse(List.of());
     }
 }

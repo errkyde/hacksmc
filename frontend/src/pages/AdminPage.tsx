@@ -7,9 +7,12 @@ import {
   useResetPassword,
   useSetUserEnabled,
   useUserHosts,
-  useCreateHost,
-  useDeleteHost,
+  useAssignHost,
+  useUnassignHost,
   useUpdatePolicy,
+  useAllHosts,
+  useCreateGlobalHost,
+  useDeleteGlobalHost,
   useAdminRules,
   useAuditLog,
   usePfSenseStatus,
@@ -72,6 +75,105 @@ function StatusBadge({ status }: { status: AdminNatRule['status'] }) {
     <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border', styles[status])}>
       {status}
     </span>
+  )
+}
+
+// ─── Passwort-Generator ────────────────────────────────────────────────────────
+
+const PW_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$&'
+function generatePassword(len = 18): string {
+  const buf = crypto.getRandomValues(new Uint8Array(len))
+  return Array.from(buf).map(b => PW_CHARS[b % PW_CHARS.length]).join('')
+}
+
+// ─── Policy Fields (shared form fragment) ─────────────────────────────────────
+
+function PolicyFields({
+  protocols, setProtocols,
+  portMin, setPortMin,
+  portMax, setPortMax,
+  maxRules, setMaxRules,
+}: {
+  protocols: ('TCP' | 'UDP')[]
+  setProtocols: (v: ('TCP' | 'UDP')[]) => void
+  portMin: string
+  setPortMin: (v: string) => void
+  portMax: string
+  setPortMax: (v: string) => void
+  maxRules: string
+  setMaxRules: (v: string) => void
+}) {
+  function toggleProtocol(p: 'TCP' | 'UDP') {
+    setProtocols(protocols.includes(p) ? protocols.filter((x) => x !== p) : [...protocols, p])
+  }
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <Label>Erlaubte Protokolle</Label>
+        <div className="flex gap-2">
+          {(['TCP', 'UDP'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => toggleProtocol(p)}
+              className={cn(
+                'px-4 py-1.5 rounded-md text-sm font-mono border transition-colors',
+                protocols.includes(p)
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/50'
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Port-Bereich</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={portMin}
+            onChange={(e) => setPortMin(e.target.value)}
+            placeholder="Von"
+            min={1}
+            max={65535}
+            required
+            className="font-mono"
+          />
+          <span className="text-muted-foreground shrink-0">–</span>
+          <Input
+            type="number"
+            value={portMax}
+            onChange={(e) => setPortMax(e.target.value)}
+            placeholder="Bis"
+            min={1}
+            max={65535}
+            required
+            className="font-mono"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Nur Ports in diesem Bereich sind für den Nutzer freischaltbar.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="pf-max">Max. gleichzeitige Regeln</Label>
+        <Input
+          id="pf-max"
+          type="number"
+          value={maxRules}
+          onChange={(e) => setMaxRules(e.target.value)}
+          min={1}
+          max={100}
+          required
+          className="font-mono w-24"
+        />
+      </div>
+    </>
   )
 }
 
@@ -167,12 +269,73 @@ function NatRulesTab() {
   )
 }
 
-// ─── Passwort-Generator ────────────────────────────────────────────────────────
+// ─── Audit Log Tab ─────────────────────────────────────────────────────────────
 
-const PW_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$&'
-function generatePassword(len = 18): string {
-  const buf = crypto.getRandomValues(new Uint8Array(len))
-  return Array.from(buf).map(b => PW_CHARS[b % PW_CHARS.length]).join('')
+const ACTION_STYLES: Record<string, string> = {
+  LOGIN:             'text-blue-400',
+  USER_CREATED:      'text-green-400',
+  USER_DELETED:      'text-red-400',
+  USER_ENABLED:      'text-emerald-400',
+  USER_DISABLED:     'text-orange-400',
+  PASSWORD_RESET:    'text-yellow-400',
+  NAT_RULE_CREATED:  'text-cyan-400',
+  NAT_RULE_DELETED:  'text-rose-400',
+}
+
+function AuditLogTab() {
+  const { data: entries = [], isLoading } = useAuditLog()
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold tracking-tight">Audit-Log</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {isLoading ? '…' : `${entries.length} Einträge`} · wird alle 30 s aktualisiert
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {isLoading ? (
+          <div className="py-14 text-center text-sm text-muted-foreground">Lädt…</div>
+        ) : entries.length === 0 ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">Noch keine Einträge</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Zeitstempel</TableHead>
+                <TableHead>Aktor</TableHead>
+                <TableHead>Aktion</TableHead>
+                <TableHead>Ziel</TableHead>
+                <TableHead>Detail</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((e: AuditLogEntry) => (
+                <TableRow key={e.id}>
+                  <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                    {new Date(e.ts).toLocaleString('de-DE')}
+                  </TableCell>
+                  <TableCell className="font-mono text-sm font-medium">{e.actor}</TableCell>
+                  <TableCell>
+                    <span className={cn('font-mono text-xs font-semibold', ACTION_STYLES[e.action] ?? 'text-foreground')}>
+                      {e.action}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm text-muted-foreground">
+                    {e.target ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {e.detail ?? '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Reset Password Dialog ─────────────────────────────────────────────────────
@@ -305,75 +468,6 @@ function ResetPasswordDialog({
   )
 }
 
-// ─── Audit Log Tab ─────────────────────────────────────────────────────────────
-
-const ACTION_STYLES: Record<string, string> = {
-  LOGIN:             'text-blue-400',
-  USER_CREATED:      'text-green-400',
-  USER_DELETED:      'text-red-400',
-  USER_ENABLED:      'text-emerald-400',
-  USER_DISABLED:     'text-orange-400',
-  PASSWORD_RESET:    'text-yellow-400',
-  NAT_RULE_CREATED:  'text-cyan-400',
-  NAT_RULE_DELETED:  'text-rose-400',
-}
-
-function AuditLogTab() {
-  const { data: entries = [], isLoading } = useAuditLog()
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold tracking-tight">Audit-Log</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {isLoading ? '…' : `${entries.length} Einträge`} · wird alle 30 s aktualisiert
-        </p>
-      </div>
-
-      <div className="rounded-xl border bg-card overflow-hidden">
-        {isLoading ? (
-          <div className="py-14 text-center text-sm text-muted-foreground">Lädt…</div>
-        ) : entries.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">Noch keine Einträge</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Zeitstempel</TableHead>
-                <TableHead>Aktor</TableHead>
-                <TableHead>Aktion</TableHead>
-                <TableHead>Ziel</TableHead>
-                <TableHead>Detail</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((e: AuditLogEntry) => (
-                <TableRow key={e.id}>
-                  <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
-                    {new Date(e.ts).toLocaleString('de-DE')}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm font-medium">{e.actor}</TableCell>
-                  <TableCell>
-                    <span className={cn('font-mono text-xs font-semibold', ACTION_STYLES[e.action] ?? 'text-foreground')}>
-                      {e.action}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-muted-foreground">
-                    {e.target ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {e.detail ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── Create User Dialog ────────────────────────────────────────────────────────
 
 function CreateUserDialog({
@@ -389,11 +483,9 @@ function CreateUserDialog({
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState(() => generatePassword())
   const [role, setRole] = useState<'USER' | 'ADMIN'>('USER')
-  // After creation: show credentials card
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Regenerate password when dialog opens fresh
   useEffect(() => {
     if (open && !created) setPassword(generatePassword())
   }, [open])
@@ -435,7 +527,6 @@ function CreateUserDialog({
         </DialogHeader>
 
         {created ? (
-          /* ── Success: show credentials ── */
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
               Zugangsdaten einmalig sichtbar — bitte jetzt kopieren und weitergeben.
@@ -457,7 +548,6 @@ function CreateUserDialog({
             </Button>
           </div>
         ) : (
-          /* ── Create form ── */
           <form id="create-user-form" onSubmit={handleSubmit} className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label htmlFor="u-username">Benutzername</Label>
@@ -542,56 +632,28 @@ function CreateUserDialog({
   )
 }
 
-// ─── Create Host Dialog ────────────────────────────────────────────────────────
+// ─── Create Global Host Dialog ─────────────────────────────────────────────────
 
-function CreateHostDialog({
-  userId,
+function CreateGlobalHostDialog({
   open,
   onOpenChange,
 }: {
-  userId: number
   open: boolean
   onOpenChange: (v: boolean) => void
 }) {
   const { toast } = useToast()
-  const createHost = useCreateHost(userId)
-
+  const createHost = useCreateGlobalHost()
   const [name, setName] = useState('')
   const [ip, setIp] = useState('')
   const [description, setDescription] = useState('')
-  const [protocols, setProtocols] = useState<('TCP' | 'UDP')[]>(['TCP'])
-  const [portMin, setPortMin] = useState('')
-  const [portMax, setPortMax] = useState('')
-  const [maxRules, setMaxRules] = useState('5')
 
-  function reset() {
-    setName(''); setIp(''); setDescription('')
-    setProtocols(['TCP']); setPortMin(''); setPortMax(''); setMaxRules('5')
-  }
-
-  function toggleProtocol(p: 'TCP' | 'UDP') {
-    setProtocols((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-    )
-  }
+  function reset() { setName(''); setIp(''); setDescription('') }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (protocols.length === 0) {
-      toast({ title: 'Fehler', description: 'Mindestens ein Protokoll wählen.', variant: 'destructive' })
-      return
-    }
     try {
-      const host = await createHost.mutateAsync({
-        name,
-        ipAddress: ip,
-        description: description || undefined,
-        allowedProtocols: protocols.join(','),
-        portRangeMin: Number(portMin),
-        portRangeMax: Number(portMax),
-        maxRules: Number(maxRules),
-      })
-      toast({ title: 'Host angelegt', description: `${host.name} wurde erstellt.` })
+      const host = await createHost.mutateAsync({ name, ipAddress: ip, description: description || undefined })
+      toast({ title: 'Host angelegt', description: `${host.name} (${host.ipAddress})` })
       onOpenChange(false)
       reset()
     } catch (err: unknown) {
@@ -604,16 +666,16 @@ function CreateHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[440px]">
+      <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>Host hinzufügen</DialogTitle>
+          <DialogTitle>Neuen Host anlegen</DialogTitle>
         </DialogHeader>
-        <form id="create-host-form" onSubmit={handleSubmit} className="space-y-4 py-2">
+        <form id="create-global-host-form" onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="h-name">Name</Label>
+              <Label htmlFor="gh-name">Name</Label>
               <Input
-                id="h-name"
+                id="gh-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="minecraft-server"
@@ -623,9 +685,9 @@ function CreateHostDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="h-ip">IP-Adresse</Label>
+              <Label htmlFor="gh-ip">IP-Adresse</Label>
               <Input
-                id="h-ip"
+                id="gh-ip"
                 value={ip}
                 onChange={(e) => setIp(e.target.value)}
                 placeholder="192.168.10.50"
@@ -634,86 +696,16 @@ function CreateHostDialog({
               />
             </div>
           </div>
-
           <div className="space-y-1.5">
-            <Label htmlFor="h-desc">
-              Beschreibung{' '}
-              <span className="text-muted-foreground font-normal">(optional)</span>
+            <Label htmlFor="gh-desc">
+              Beschreibung <span className="text-muted-foreground font-normal">(optional)</span>
             </Label>
             <Input
-              id="h-desc"
+              id="gh-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="z.B. Minecraft Game Server"
               maxLength={255}
-            />
-          </div>
-
-          {/* Protocols */}
-          <div className="space-y-1.5">
-            <Label>Erlaubte Protokolle</Label>
-            <div className="flex gap-2">
-              {(['TCP', 'UDP'] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => toggleProtocol(p)}
-                  className={cn(
-                    'px-4 py-1.5 rounded-md text-sm font-mono border transition-colors',
-                    protocols.includes(p)
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/50'
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Port range */}
-          <div className="space-y-1.5">
-            <Label>Port-Bereich</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={portMin}
-                onChange={(e) => setPortMin(e.target.value)}
-                placeholder="Von"
-                min={1}
-                max={65535}
-                required
-                className="font-mono"
-              />
-              <span className="text-muted-foreground shrink-0">–</span>
-              <Input
-                type="number"
-                value={portMax}
-                onChange={(e) => setPortMax(e.target.value)}
-                placeholder="Bis"
-                min={1}
-                max={65535}
-                required
-                className="font-mono"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Nur Ports in diesem Bereich sind für den Nutzer freischaltbar.
-            </p>
-          </div>
-
-          {/* Max rules */}
-          <div className="space-y-1.5">
-            <Label htmlFor="h-max">Max. gleichzeitige Regeln</Label>
-            <Input
-              id="h-max"
-              type="number"
-              value={maxRules}
-              onChange={(e) => setMaxRules(e.target.value)}
-              min={1}
-              max={100}
-              required
-              className="font-mono w-24"
             />
           </div>
         </form>
@@ -721,13 +713,127 @@ function CreateHostDialog({
           <DialogClose asChild>
             <Button variant="outline">Abbrechen</Button>
           </DialogClose>
-          <Button
-            type="submit"
-            form="create-host-form"
-            disabled={createHost.isPending}
-          >
+          <Button type="submit" form="create-global-host-form" disabled={createHost.isPending}>
             {createHost.isPending ? 'Wird erstellt…' : 'Host anlegen'}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Assign Host Dialog ────────────────────────────────────────────────────────
+
+function AssignHostDialog({
+  userId,
+  assignedHostIds,
+  open,
+  onOpenChange,
+}: {
+  userId: number
+  assignedHostIds: number[]
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const { toast } = useToast()
+  const { data: allHosts = [] } = useAllHosts()
+  const assignHost = useAssignHost(userId)
+
+  const available = allHosts.filter((h) => !assignedHostIds.includes(h.id))
+
+  const [selectedHostId, setSelectedHostId] = useState<string>('')
+  const [protocols, setProtocols] = useState<('TCP' | 'UDP')[]>(['TCP'])
+  const [portMin, setPortMin] = useState('')
+  const [portMax, setPortMax] = useState('')
+  const [maxRules, setMaxRules] = useState('5')
+
+  function reset() {
+    setSelectedHostId('')
+    setProtocols(['TCP'])
+    setPortMin('')
+    setPortMax('')
+    setMaxRules('5')
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!selectedHostId) {
+      toast({ title: 'Fehler', description: 'Bitte einen Host auswählen.', variant: 'destructive' })
+      return
+    }
+    if (protocols.length === 0) {
+      toast({ title: 'Fehler', description: 'Mindestens ein Protokoll wählen.', variant: 'destructive' })
+      return
+    }
+    try {
+      const host = await assignHost.mutateAsync({
+        hostId: Number(selectedHostId),
+        data: {
+          allowedProtocols: protocols.join(','),
+          portRangeMin: Number(portMin),
+          portRangeMax: Number(portMax),
+          maxRules: Number(maxRules),
+        },
+      })
+      toast({ title: 'Host zugewiesen', description: `${host.name} wurde zugewiesen.` })
+      onOpenChange(false)
+      reset()
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        'Fehler beim Zuweisen'
+      toast({ title: 'Fehler', description: detail, variant: 'destructive' })
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Host zuweisen</DialogTitle>
+        </DialogHeader>
+        <form id="assign-host-form" onSubmit={handleSubmit} className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Host</Label>
+            {available.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                Alle verfügbaren Hosts sind bereits zugewiesen. Lege zuerst einen neuen Host im Tab "Hosts" an.
+              </p>
+            ) : (
+              <Select value={selectedHostId} onValueChange={setSelectedHostId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Host auswählen…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {available.map((h) => (
+                    <SelectItem key={h.id} value={String(h.id)}>
+                      <span className="font-mono">{h.name}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">{h.ipAddress}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {available.length > 0 && (
+            <PolicyFields
+              protocols={protocols} setProtocols={setProtocols}
+              portMin={portMin} setPortMin={setPortMin}
+              portMax={portMax} setPortMax={setPortMax}
+              maxRules={maxRules} setMaxRules={setMaxRules}
+            />
+          )}
+        </form>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Abbrechen</Button>
+          </DialogClose>
+          {available.length > 0 && (
+            <Button type="submit" form="assign-host-form" disabled={assignHost.isPending}>
+              {assignHost.isPending ? 'Wird zugewiesen…' : 'Zuweisen'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -757,12 +863,6 @@ function EditPolicyDialog({
   const [portMin, setPortMin] = useState(String(pol?.portRangeMin ?? 1))
   const [portMax, setPortMax] = useState(String(pol?.portRangeMax ?? 65535))
   const [maxRules, setMaxRules] = useState(String(pol?.maxRules ?? 5))
-
-  function toggleProtocol(p: 'TCP' | 'UDP') {
-    setProtocols((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-    )
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -795,80 +895,23 @@ function EditPolicyDialog({
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>
-            Policy bearbeiten —{' '}
+            Berechtigung bearbeiten —{' '}
             <span className="font-mono text-primary">{host.name}</span>
           </DialogTitle>
         </DialogHeader>
         <form id="edit-policy-form" onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label>Erlaubte Protokolle</Label>
-            <div className="flex gap-2">
-              {(['TCP', 'UDP'] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => toggleProtocol(p)}
-                  className={cn(
-                    'px-4 py-1.5 rounded-md text-sm font-mono border transition-colors',
-                    protocols.includes(p)
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/50'
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Port-Bereich</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={portMin}
-                onChange={(e) => setPortMin(e.target.value)}
-                min={1}
-                max={65535}
-                required
-                className="font-mono"
-              />
-              <span className="text-muted-foreground shrink-0">–</span>
-              <Input
-                type="number"
-                value={portMax}
-                onChange={(e) => setPortMax(e.target.value)}
-                min={1}
-                max={65535}
-                required
-                className="font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="ep-max">Max. gleichzeitige Regeln</Label>
-            <Input
-              id="ep-max"
-              type="number"
-              value={maxRules}
-              onChange={(e) => setMaxRules(e.target.value)}
-              min={1}
-              max={100}
-              required
-              className="font-mono w-24"
-            />
-          </div>
+          <PolicyFields
+            protocols={protocols} setProtocols={setProtocols}
+            portMin={portMin} setPortMin={setPortMin}
+            portMax={portMax} setPortMax={setPortMax}
+            maxRules={maxRules} setMaxRules={setMaxRules}
+          />
         </form>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Abbrechen</Button>
           </DialogClose>
-          <Button
-            type="submit"
-            form="edit-policy-form"
-            disabled={updatePolicy.isPending}
-          >
+          <Button type="submit" form="edit-policy-form" disabled={updatePolicy.isPending}>
             {updatePolicy.isPending ? 'Speichert…' : 'Speichern'}
           </Button>
         </DialogFooter>
@@ -877,25 +920,25 @@ function EditPolicyDialog({
   )
 }
 
-// ─── Hosts Section (expanded per user) ────────────────────────────────────────
+// ─── User Hosts Section (expanded per user) ────────────────────────────────────
 
 function UserHostsSection({ user }: { user: AdminUser }) {
   const { data: hosts = [], isLoading } = useUserHosts(user.id)
-  const deleteHost = useDeleteHost(user.id)
+  const unassignHost = useUnassignHost(user.id)
   const { toast } = useToast()
 
-  const [addHostOpen, setAddHostOpen] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
   const [editHost, setEditHost] = useState<HostDto | null>(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [unassignConfirmId, setUnassignConfirmId] = useState<number | null>(null)
 
-  async function handleDeleteHost(hostId: number) {
+  async function handleUnassign(hostId: number) {
     try {
-      await deleteHost.mutateAsync(hostId)
-      setDeleteConfirmId(null)
-      toast({ title: 'Host gelöscht' })
+      await unassignHost.mutateAsync(hostId)
+      setUnassignConfirmId(null)
+      toast({ title: 'Zuweisung entfernt' })
     } catch {
-      toast({ title: 'Fehler', description: 'Host konnte nicht gelöscht werden.', variant: 'destructive' })
-      setDeleteConfirmId(null)
+      toast({ title: 'Fehler', description: 'Zuweisung konnte nicht entfernt werden.', variant: 'destructive' })
+      setUnassignConfirmId(null)
     }
   }
 
@@ -903,11 +946,11 @@ function UserHostsSection({ user }: { user: AdminUser }) {
     <div className="border-t bg-muted/30 px-6 py-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-          Hosts & Berechtigungen
+          Zugewiesene Hosts
         </p>
-        <Button size="sm" variant="outline" onClick={() => setAddHostOpen(true)}>
+        <Button size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
           <Plus className="h-3.5 w-3.5 mr-1" />
-          Host hinzufügen
+          Host zuweisen
         </Button>
       </div>
 
@@ -916,7 +959,7 @@ function UserHostsSection({ user }: { user: AdminUser }) {
       ) : hosts.length === 0 ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-3 border border-dashed rounded-lg px-4">
           <Server className="h-4 w-4 shrink-0" />
-          <span>Kein Host zugewiesen. Füge einen Host hinzu, um Ports freizuschalten.</span>
+          <span>Kein Host zugewiesen. Weise einen Host zu, um Ports freizuschalten.</span>
         </div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
@@ -965,19 +1008,19 @@ function UserHostsSection({ user }: { user: AdminUser }) {
                         variant="ghost"
                         className="h-7 px-2 text-muted-foreground hover:text-foreground"
                         onClick={() => setEditHost(host)}
-                        title="Policy bearbeiten"
+                        title="Berechtigung bearbeiten"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      {deleteConfirmId === host.id ? (
+                      {unassignConfirmId === host.id ? (
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="text-xs text-muted-foreground">Löschen?</span>
+                          <span className="text-xs text-muted-foreground">Entfernen?</span>
                           <Button
                             size="sm"
                             variant="destructive"
                             className="h-7 px-2"
-                            disabled={deleteHost.isPending}
-                            onClick={() => handleDeleteHost(host.id)}
+                            disabled={unassignHost.isPending}
+                            onClick={() => handleUnassign(host.id)}
                           >
                             Ja
                           </Button>
@@ -985,7 +1028,7 @@ function UserHostsSection({ user }: { user: AdminUser }) {
                             size="sm"
                             variant="ghost"
                             className="h-7 px-2"
-                            onClick={() => setDeleteConfirmId(null)}
+                            onClick={() => setUnassignConfirmId(null)}
                           >
                             Nein
                           </Button>
@@ -995,8 +1038,8 @@ function UserHostsSection({ user }: { user: AdminUser }) {
                           size="sm"
                           variant="ghost"
                           className="h-7 px-2 text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteConfirmId(host.id)}
-                          title="Host löschen"
+                          onClick={() => setUnassignConfirmId(host.id)}
+                          title="Zuweisung entfernen"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -1010,7 +1053,12 @@ function UserHostsSection({ user }: { user: AdminUser }) {
         </div>
       )}
 
-      <CreateHostDialog userId={user.id} open={addHostOpen} onOpenChange={setAddHostOpen} />
+      <AssignHostDialog
+        userId={user.id}
+        assignedHostIds={hosts.map((h) => h.id)}
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+      />
       {editHost && (
         <EditPolicyDialog
           userId={user.id}
@@ -1019,6 +1067,117 @@ function UserHostsSection({ user }: { user: AdminUser }) {
           onOpenChange={(v) => { if (!v) setEditHost(null) }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Hosts Tab ─────────────────────────────────────────────────────────────────
+
+function HostsTab() {
+  const { data: hosts = [], isLoading } = useAllHosts()
+  const deleteHost = useDeleteGlobalHost()
+  const { toast } = useToast()
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+
+  async function handleDelete(hostId: number) {
+    try {
+      await deleteHost.mutateAsync(hostId)
+      setDeleteConfirmId(null)
+      toast({ title: 'Host gelöscht' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Host konnte nicht gelöscht werden. Möglicherweise existieren noch aktive NAT-Regeln.', variant: 'destructive' })
+      setDeleteConfirmId(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Hosts</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isLoading ? '…' : `${hosts.length} Host${hosts.length !== 1 ? 's' : ''}`} · globale Ressourcen
+          </p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Neuer Host
+        </Button>
+      </div>
+
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {isLoading ? (
+          <div className="py-14 text-center text-sm text-muted-foreground">Lädt…</div>
+        ) : hosts.length === 0 ? (
+          <div className="py-16 text-center">
+            <Server className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Noch keine Hosts angelegt.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Lege Hosts hier an und weise sie dann Benutzern zu.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>IP-Adresse</TableHead>
+                <TableHead>Beschreibung</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {hosts.map((host) => (
+                <TableRow key={host.id}>
+                  <TableCell className="font-medium font-mono">{host.name}</TableCell>
+                  <TableCell className="font-mono text-sm text-muted-foreground">{host.ipAddress}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {host.description ?? <span className="italic text-xs">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {deleteConfirmId === host.id ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Löschen?</span>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 px-2"
+                          disabled={deleteHost.isPending}
+                          onClick={() => handleDelete(host.id)}
+                        >
+                          Ja
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => setDeleteConfirmId(null)}
+                        >
+                          Nein
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteConfirmId(host.id)}
+                        title="Host löschen"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      <CreateGlobalHostDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }
@@ -1161,7 +1320,6 @@ function UsersTab() {
                           </span>
                         ) : (
                           <div className="flex items-center justify-end gap-1">
-                            {/* Reset password */}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -1171,7 +1329,6 @@ function UsersTab() {
                             >
                               <KeyRound className="h-3.5 w-3.5" />
                             </Button>
-                            {/* Lock/unlock */}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -1189,7 +1346,6 @@ function UsersTab() {
                                 ? <Lock className="h-3.5 w-3.5" />
                                 : <Unlock className="h-3.5 w-3.5" />}
                             </Button>
-                            {/* Delete */}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -1260,7 +1416,6 @@ function PfSenseTab() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-        {/* Status */}
         <div className={cn(
           'rounded-xl border p-6',
           isLoading
@@ -1284,7 +1439,6 @@ function PfSenseTab() {
           </div>
         </div>
 
-        {/* Latency */}
         <div className="rounded-xl border bg-card p-6">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Latenz</p>
           <span className="text-2xl font-bold font-mono tracking-tight">
@@ -1297,7 +1451,6 @@ function PfSenseTab() {
           )}
         </div>
 
-        {/* Endpoint URL */}
         <div className="rounded-xl border bg-card p-6">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Endpunkt</p>
           <span className="text-sm font-mono text-foreground break-all leading-relaxed">
@@ -1306,7 +1459,6 @@ function PfSenseTab() {
         </div>
       </div>
 
-      {/* Error detail */}
       {!isLoading && !up && data?.error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
           <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5">Fehlerdetail</p>
@@ -1319,10 +1471,11 @@ function PfSenseTab() {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'rules' | 'audit' | 'pfsense'
+type Tab = 'users' | 'hosts' | 'rules' | 'audit' | 'pfsense'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'users', label: 'Benutzer', icon: <Users className="h-4 w-4" /> },
+  { id: 'hosts', label: 'Hosts', icon: <Server className="h-4 w-4" /> },
   { id: 'rules', label: 'NAT-Regeln', icon: <Network className="h-4 w-4" /> },
   { id: 'audit', label: 'Audit-Log', icon: <ScrollText className="h-4 w-4" /> },
   { id: 'pfsense', label: 'pfSense', icon: <Wifi className="h-4 w-4" /> },
@@ -1333,7 +1486,6 @@ export default function AdminPage() {
 
   return (
     <Layout>
-      {/* Tab bar */}
       <div className="flex gap-1 mb-8 border-b pb-0">
         {TABS.map((tab) => (
           <button
@@ -1353,6 +1505,7 @@ export default function AdminPage() {
       </div>
 
       {activeTab === 'users' && <UsersTab />}
+      {activeTab === 'hosts' && <HostsTab />}
       {activeTab === 'rules' && <NatRulesTab />}
       {activeTab === 'audit' && <AuditLogTab />}
       {activeTab === 'pfsense' && <PfSenseTab />}

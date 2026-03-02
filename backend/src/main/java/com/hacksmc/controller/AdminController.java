@@ -49,24 +49,51 @@ public class AdminController {
         return adminService.setUserEnabled(id, req.enabled());
     }
 
-    // ── Hosts ──────────────────────────────────────────────────────────────────
+    // ── Global Hosts ───────────────────────────────────────────────────────────
 
-    @GetMapping("/users/{id}/hosts")
-    public List<HostDto> getUserHosts(@PathVariable Long id) {
-        return adminService.getHostsForUser(id);
+    @GetMapping("/hosts")
+    public List<HostDto> getAllHosts() {
+        return adminService.getAllHosts();
     }
 
-    @PostMapping("/users/{id}/hosts")
+    @PostMapping("/hosts")
     @ResponseStatus(HttpStatus.CREATED)
-    public HostDto createHost(@PathVariable Long id,
-                              @Valid @RequestBody CreateHostRequest req) {
-        return adminService.createHost(id, req);
+    public HostDto createHost(@Valid @RequestBody CreateHostRequest req) {
+        return adminService.createHost(req);
     }
 
     @DeleteMapping("/hosts/{hostId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteHost(@PathVariable Long hostId) {
         adminService.deleteHost(hostId);
+    }
+
+    // ── User-Host Assignments ──────────────────────────────────────────────────
+
+    @GetMapping("/users/{id}/hosts")
+    public List<HostDto> getUserHosts(@PathVariable Long id) {
+        return adminService.getHostsForUser(id);
+    }
+
+    @PostMapping("/users/{userId}/hosts/{hostId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HostDto assignHost(@PathVariable Long userId,
+                              @PathVariable Long hostId,
+                              @Valid @RequestBody AssignHostRequest req) {
+        return adminService.assignHostToUser(userId, hostId, req);
+    }
+
+    @DeleteMapping("/users/{userId}/hosts/{hostId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unassignHost(@PathVariable Long userId, @PathVariable Long hostId) {
+        adminService.unassignHostFromUser(userId, hostId);
+    }
+
+    @PutMapping("/users/{userId}/hosts/{hostId}/policy")
+    public PolicyDto updatePolicy(@PathVariable Long userId,
+                                  @PathVariable Long hostId,
+                                  @Valid @RequestBody UpdatePolicyRequest req) {
+        return adminService.updatePolicy(userId, hostId, req);
     }
 
     // ── NAT Rules ──────────────────────────────────────────────────────────────
@@ -88,13 +115,5 @@ public class AdminController {
     @GetMapping("/pfsense/status")
     public PfSenseStatusResponse getPfSenseStatus() {
         return adminService.getPfSenseStatus();
-    }
-
-    // ── Policies ───────────────────────────────────────────────────────────────
-
-    @PutMapping("/hosts/{hostId}/policy")
-    public PolicyDto updatePolicy(@PathVariable Long hostId,
-                                  @Valid @RequestBody UpdatePolicyRequest req) {
-        return adminService.updatePolicy(hostId, req);
     }
 }
