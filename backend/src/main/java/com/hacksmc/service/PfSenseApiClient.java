@@ -8,9 +8,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.net.http.HttpClient;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
@@ -137,7 +140,7 @@ public class PfSenseApiClient {
         }
     }
 
-    private org.springframework.http.client.SimpleClientHttpRequestFactory trustAllCertsRequestFactory() {
+    private JdkClientHttpRequestFactory trustAllCertsRequestFactory() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
             sslContext.init(null, new TrustManager[]{new X509TrustManager() {
@@ -146,10 +149,12 @@ public class PfSenseApiClient {
                 public void checkServerTrusted(X509Certificate[] certs, String authType) {}
             }}, null);
 
-            var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-            // Note: for production, configure a proper SSLContext with your CA cert instead
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .sslContext(sslContext)
+                    .build();
+
             log.warn("pfSense client: trust-all-certs is enabled — use only in development!");
-            return factory;
+            return new JdkClientHttpRequestFactory(httpClient);
         } catch (Exception e) {
             throw new RuntimeException("Failed to create trust-all SSL context", e);
         }
