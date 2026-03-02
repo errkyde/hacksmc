@@ -74,6 +74,7 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
+            log.error("pfSense createNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
 
