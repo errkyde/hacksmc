@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.net.http.HttpClient;
@@ -150,8 +151,12 @@ public class PfSenseApiClient {
                 public void checkServerTrusted(X509Certificate[] certs, String authType) {}
             }}, null);
 
+            SSLParameters sslParameters = new SSLParameters();
+            sslParameters.setEndpointIdentificationAlgorithm("");
+
             HttpClient httpClient = HttpClient.newBuilder()
                     .sslContext(sslContext)
+                    .sslParameters(sslParameters)
                     .build();
 
             log.warn("pfSense client: trust-all-certs is enabled — use only in development!");
