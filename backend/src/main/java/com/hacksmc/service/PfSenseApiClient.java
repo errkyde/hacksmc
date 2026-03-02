@@ -66,7 +66,7 @@ public class PfSenseApiClient {
         Map<String, Object> response;
         try {
             response = restClient.post()
-                    .uri("/api/firewall/nat/port_forward")
+                    .uri("/api/v2/firewall/nat/port_forward")
                     .body(body)
                     .retrieve()
                     .body(Map.class);
@@ -90,7 +90,7 @@ public class PfSenseApiClient {
         log.info("Deleting pfSense NAT rule: {}", pfSenseRuleId);
         try {
             restClient.delete()
-                    .uri("/api/firewall/nat/port_forward/" + pfSenseRuleId)
+                    .uri("/api/v2/firewall/nat/port_forward?id=" + pfSenseRuleId)
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
@@ -127,7 +127,7 @@ public class PfSenseApiClient {
         long start = System.currentTimeMillis();
         try {
             restClient.get()
-                    .uri("/api/system/status")
+                    .uri("/api/v2/status/system")
                     .retrieve()
                     .toBodilessEntity();
             return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start, baseUrl, null);
