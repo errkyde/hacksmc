@@ -18,8 +18,8 @@ import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @Slf4j
@@ -114,10 +114,11 @@ public class PfSenseApiClient {
     }
 
     /**
-     * Returns the set of tracker values for all NAT port-forward rules currently in pfSense.
+     * Returns a map of tracker → array index for all NAT port-forward rules in pfSense.
+     * Used by PfSenseSyncService to detect deleted rules and track their position.
      */
     @SuppressWarnings("unchecked")
-    public Set<String> getNatRuleTrackers() {
+    public Map<String, Integer> getNatRuleTrackerPositions() {
         Map<String, Object> response;
         try {
             response = restClient.get()
@@ -129,42 +130,27 @@ public class PfSenseApiClient {
         }
 
         if (response == null || !response.containsKey("data")) {
-            return Set.of();
+            return Map.of();
         }
 
         List<Map<String, Object>> rules = (List<Map<String, Object>>) response.get("data");
-        return rules.stream()
-                .map(r -> r.get("tracker"))
-                .filter(t -> t != null)
-                .map(String::valueOf)
-                .collect(Collectors.toSet());
+        return IntStream.range(0, rules.size())
+                .filter(i -> rules.get(i).get("tracker") != null)
+                .boxed()
+                .collect(Collectors.toMap(
+                        i -> String.valueOf(rules.get(i).get("tracker")),
+                        i -> i,
+                        (a, b) -> a
+                ));
     }
 
-    @SuppressWarnings("unchecked")
     private int findArrayIdByTracker(String tracker) {
-        Map<String, Object> response;
-        try {
-            response = restClient.get()
-                    .uri("/api/v2/firewall/nat/port_forwards")
-                    .retrieve()
-                    .body(Map.class);
-        } catch (Exception e) {
-            log.error("pfSense findArrayIdByTracker failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
-            throw new PfSenseException(humanReadable(e), e);
+        Map<String, Integer> positions = getNatRuleTrackerPositions();
+        Integer idx = positions.get(tracker);
+        if (idx == null) {
+            throw new PfSenseException("NAT-Regel mit tracker=" + tracker + " nicht in pfSense gefunden", null);
         }
-
-        if (response == null || !response.containsKey("data")) {
-            throw new PfSenseException("Unerwartete Antwort von pfSense beim Abrufen der NAT-Regeln", null);
-        }
-
-        List<Map<String, Object>> rules = (List<Map<String, Object>>) response.get("data");
-        for (int i = 0; i < rules.size(); i++) {
-            Object ruleTracker = rules.get(i).get("tracker");
-            if (ruleTracker != null && tracker.equals(String.valueOf(ruleTracker))) {
-                return i;
-            }
-        }
-        throw new PfSenseException("NAT-Regel mit tracker=" + tracker + " nicht in pfSense gefunden", null);
+        return idx;
     }
 
     private static String humanReadable(Exception e) {

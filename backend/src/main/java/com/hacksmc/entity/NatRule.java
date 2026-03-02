@@ -37,6 +37,10 @@ public class NatRule {
     @Column
     private String pfSenseRuleId;
 
+    /** Position in pfSense's NAT rule array (0-based), updated by PfSenseSyncService */
+    @Column
+    private Integer pfSensePosition;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NatRuleStatus status;

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -22,9 +22,10 @@ public class PfSenseSyncService {
 
     @Scheduled(fixedDelay = 60_000)
     public void syncNatRules() {
-        Set<String> pfSenseTrackers;
+        // tracker -> array index (position in pfSense)
+        Map<String, Integer> trackerToPosition;
         try {
-            pfSenseTrackers = pfSenseApiClient.getNatRuleTrackers();
+            trackerToPosition = pfSenseApiClient.getNatRuleTrackerPositions();
         } catch (Exception e) {
             log.warn("pfSense sync skipped (pfSense nicht erreichbar): {}", e.getMessage());
             return;
@@ -32,23 +33,30 @@ public class PfSenseSyncService {
 
         List<NatRule> activeRules = natRuleRepository.findByStatus(NatRuleStatus.ACTIVE);
         int marked = 0;
+        int updated = 0;
         for (NatRule rule : activeRules) {
             String tracker = rule.getPfSenseRuleId();
             if (tracker == null || tracker.isBlank() || tracker.equals("null")) continue;
-            if (!pfSenseTrackers.contains(tracker)) {
+
+            if (!trackerToPosition.containsKey(tracker)) {
                 rule.setStatus(NatRuleStatus.DELETED);
                 rule.setDeletedAt(Instant.now());
+                rule.setPfSensePosition(null);
                 natRuleRepository.save(rule);
                 marked++;
                 log.warn("Sync: Regel {} (tracker={}) nicht mehr in pfSense — als DELETED markiert",
                         rule.getId(), tracker);
+            } else {
+                Integer pos = trackerToPosition.get(tracker);
+                if (!pos.equals(rule.getPfSensePosition())) {
+                    rule.setPfSensePosition(pos);
+                    natRuleRepository.save(rule);
+                    updated++;
+                }
             }
         }
 
-        if (marked > 0) {
-            log.info("pfSense Sync abgeschlossen: {} Regel(n) als DELETED markiert", marked);
-        } else {
-            log.debug("pfSense Sync: alle {} aktiven Regeln in pfSense bestätigt", activeRules.size());
-        }
+        log.debug("pfSense Sync: {} aktiv, {} position(en) aktualisiert, {} als DELETED markiert",
+                activeRules.size(), updated, marked);
     }
 }

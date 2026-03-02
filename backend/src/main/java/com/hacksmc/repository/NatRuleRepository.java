@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface NatRuleRepository extends JpaRepository<NatRule, Long> {
-    @Query("SELECT r FROM NatRule r JOIN FETCH r.host WHERE r.user.id = :userId ORDER BY r.createdAt DESC")
+    @Query("SELECT r FROM NatRule r JOIN FETCH r.host WHERE r.user.id = :userId ORDER BY COALESCE(r.pfSensePosition, 999999) ASC, r.createdAt DESC")
     List<NatRule> findByUserIdWithHost(@Param("userId") Long userId);
 
     List<NatRule> findByUserIdAndStatus(Long userId, NatRuleStatus status);
