@@ -5,10 +5,9 @@ import com.hacksmc.exception.PfSenseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -21,9 +20,20 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+/**
+ * Client for the pfSense REST API (pfrest.org v2).
+ *
+ * pfSense NAT port-forward rules have no persistent tracker field.
+ * We embed a tag "[hsmc:{dbId}]" in every rule description so we can
+ * reliably identify and locate our rules regardless of array-index shifts.
+ */
 @Service
 @Slf4j
 public class PfSenseApiClient {
+
+    /** Tag format embedded in pfSense rule descriptions. */
+    private static final String TAG_PREFIX = "[hsmc:";
+    private static final String TAG_SUFFIX = "]";
 
     private final RestClient restClient;
     private final String baseUrl;
@@ -49,10 +59,16 @@ public class PfSenseApiClient {
 
     /**
      * Creates a NAT port-forward rule on pfSense.
-     * Returns the pfSense-assigned rule ID.
+     * Embeds [hsmc:{dbRuleId}] in the description for reliable identification.
+     * Stores the dbRuleId as pfSenseRuleId in the DB.
      */
-    public String createNatRule(String destIp, String protocol, int port, String description) {
-        log.info("Creating pfSense NAT rule: {}:{}/{} -> {}", destIp, port, protocol, description);
+    public String createNatRule(String destIp, String protocol, int port, String userDescription, Long dbRuleId) {
+        String tag = TAG_PREFIX + dbRuleId + TAG_SUFFIX;
+        String descr = (userDescription != null && !userDescription.isBlank())
+                ? userDescription + " " + tag
+                : "HackSMC rule #" + dbRuleId + " " + tag;
+
+        log.info("Creating pfSense NAT rule: {}:{}/{} descr={}", destIp, port, protocol, descr);
 
         Map<String, Object> body = new HashMap<>();
         body.put("interface", "wan");
@@ -63,45 +79,33 @@ public class PfSenseApiClient {
         body.put("destination_port", String.valueOf(port));
         body.put("target", destIp);
         body.put("local_port", String.valueOf(port));
-        body.put("descr", description);
+        body.put("descr", descr);
         body.put("disabled", false);
         body.put("associated_rule_id", "");
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> response;
         try {
-            response = restClient.post()
+            restClient.post()
                     .uri("/api/v2/firewall/nat/port_forward?apply=true")
                     .body(body)
                     .retrieve()
-                    .body(Map.class);
+                    .toBodilessEntity();
         } catch (Exception e) {
             log.error("pfSense createNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
 
-        if (response == null || !response.containsKey("data")) {
-            throw new PfSenseException("Unerwartete Antwort von pfSense (kein 'data'-Feld)", null);
-        }
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) response.get("data");
-        Object tracker = data.get("tracker");
-        if (tracker == null) {
-            throw new PfSenseException("pfSense hat keinen tracker zurückgegeben", null);
-        }
-        return String.valueOf(tracker);
+        // pfSenseRuleId = our own DB rule ID (used as the stable identifier via description tag)
+        return String.valueOf(dbRuleId);
     }
 
     /**
-     * Deletes a NAT rule from pfSense by its tracker value.
-     * pfSense DELETE requires the array index (id), not the tracker.
-     * We first fetch all rules to find the current index for the given tracker.
+     * Deletes a NAT rule from pfSense by its stored pfSenseRuleId (= our DB rule ID).
+     * Locates the rule in pfSense by searching descriptions for [hsmc:{pfSenseRuleId}].
      */
-    public void deleteNatRule(String tracker) {
-        log.info("Deleting pfSense NAT rule with tracker: {}", tracker);
-        int arrayId = findArrayIdByTracker(tracker);
-        log.info("Resolved tracker {} to array id {}", tracker, arrayId);
+    public void deleteNatRule(String pfSenseRuleId) {
+        log.info("Deleting pfSense NAT rule with hsmc-id: {}", pfSenseRuleId);
+        int arrayId = findArrayIdByHsmcId(pfSenseRuleId);
+        log.info("Resolved hsmc-id {} to array index {}", pfSenseRuleId, arrayId);
         try {
             restClient.delete()
                     .uri("/api/v2/firewall/nat/port_forward?id=" + arrayId + "&apply=true")
@@ -114,11 +118,34 @@ public class PfSenseApiClient {
     }
 
     /**
-     * Returns a map of tracker → array index for all NAT port-forward rules in pfSense.
-     * Used by PfSenseSyncService to detect deleted rules and track their position.
+     * Returns a map of hsmc-id → array index for all pfSense NAT rules that contain our tag.
+     * Used for reconciliation and sync.
      */
     @SuppressWarnings("unchecked")
-    public Map<String, Integer> getNatRuleTrackerPositions() {
+    public Map<String, Integer> getHsmcRulePositions() {
+        List<Map<String, Object>> pfRules = fetchAllNatRules();
+        Map<String, Integer> result = new HashMap<>();
+        for (int i = 0; i < pfRules.size(); i++) {
+            String descr = (String) pfRules.get(i).get("descr");
+            String hsmcId = extractHsmcId(descr);
+            if (hsmcId != null) {
+                result.put(hsmcId, i);
+            }
+        }
+        return result;
+    }
+
+    private int findArrayIdByHsmcId(String hsmcId) {
+        Map<String, Integer> positions = getHsmcRulePositions();
+        Integer idx = positions.get(hsmcId);
+        if (idx == null) {
+            throw new PfSenseException("NAT-Regel [hsmc:" + hsmcId + "] nicht in pfSense gefunden", null);
+        }
+        return idx;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fetchAllNatRules() {
         Map<String, Object> response;
         try {
             response = restClient.get()
@@ -126,31 +153,23 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
+            log.error("pfSense fetchAllNatRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
-
         if (response == null || !response.containsKey("data")) {
-            return Map.of();
+            return List.of();
         }
-
-        List<Map<String, Object>> rules = (List<Map<String, Object>>) response.get("data");
-        return IntStream.range(0, rules.size())
-                .filter(i -> rules.get(i).get("tracker") != null)
-                .boxed()
-                .collect(Collectors.toMap(
-                        i -> String.valueOf(rules.get(i).get("tracker")),
-                        i -> i,
-                        (a, b) -> a
-                ));
+        return (List<Map<String, Object>>) response.get("data");
     }
 
-    private int findArrayIdByTracker(String tracker) {
-        Map<String, Integer> positions = getNatRuleTrackerPositions();
-        Integer idx = positions.get(tracker);
-        if (idx == null) {
-            throw new PfSenseException("NAT-Regel mit tracker=" + tracker + " nicht in pfSense gefunden", null);
-        }
-        return idx;
+    /** Extracts the numeric ID from a description containing "[hsmc:X]", or null if absent. */
+    static String extractHsmcId(String descr) {
+        if (descr == null) return null;
+        int start = descr.indexOf(TAG_PREFIX);
+        if (start == -1) return null;
+        int end = descr.indexOf(TAG_SUFFIX, start + TAG_PREFIX.length());
+        if (end == -1) return null;
+        return descr.substring(start + TAG_PREFIX.length(), end);
     }
 
     private static String humanReadable(Exception e) {
@@ -167,9 +186,7 @@ public class PfSenseApiClient {
         return msg;
     }
 
-    /**
-     * Quick connectivity check against pfSense. Returns UP/DOWN with latency.
-     */
+    /** Quick connectivity check against pfSense. Returns UP/DOWN with latency. */
     public PfSenseStatusResponse checkHealth() {
         if (baseUrl == null || baseUrl.isBlank()) {
             return new PfSenseStatusResponse("DOWN", null, baseUrl,
@@ -194,9 +211,6 @@ public class PfSenseApiClient {
 
     private JdkClientHttpRequestFactory trustAllCertsRequestFactory() {
         try {
-            // java.net.http.HttpClient internally overwrites endpointIdentificationAlgorithm="HTTPS"
-            // in AbstractAsyncSSLConnection regardless of what SSLParameters you set.
-            // The only way to disable hostname verification is this JVM system property.
             System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
 
             SSLContext sslContext = SSLContext.getInstance("TLS");

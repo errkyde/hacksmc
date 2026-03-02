@@ -39,7 +39,7 @@ public class NatRuleService {
 
         // Fetch live pfSense state and reconcile before returning
         try {
-            Map<String, Integer> pfSenseTrackers = pfSenseApiClient.getNatRuleTrackerPositions();
+            Map<String, Integer> pfSenseTrackers = pfSenseApiClient.getHsmcRulePositions();
             for (NatRule rule : rules) {
                 if (rule.getStatus() == NatRuleStatus.DELETED) continue;
 
@@ -95,10 +95,10 @@ public class NatRuleService {
         rule.setStatus(NatRuleStatus.PENDING);
         natRuleRepository.save(rule);
 
-        // Call pfSense
+        // Call pfSense — embeds [hsmc:{id}] tag in description for stable identification
         String pfSenseId = pfSenseApiClient.createNatRule(
                 host.getIpAddress(), request.protocol(), request.port(),
-                request.description() != null ? request.description() : "HackSMC rule #" + rule.getId()
+                request.description(), rule.getId()
         );
 
         rule.setPfSenseRuleId(pfSenseId);

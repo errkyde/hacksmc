@@ -27,7 +27,7 @@ public class PfSenseSyncService {
         // tracker -> array index (position in pfSense)
         Map<String, Integer> trackerToPosition;
         try {
-            trackerToPosition = pfSenseApiClient.getNatRuleTrackerPositions();
+            trackerToPosition = pfSenseApiClient.getHsmcRulePositions();
         } catch (Exception e) {
             log.warn("pfSense sync skipped (pfSense nicht erreichbar): {}", e.getMessage());
             return;
