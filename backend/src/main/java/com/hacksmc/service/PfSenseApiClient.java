@@ -1,6 +1,7 @@
 package com.hacksmc.service;
 
 import com.hacksmc.dto.PfSenseStatusResponse;
+import com.hacksmc.exception.PfSenseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -60,14 +61,19 @@ public class PfSenseApiClient {
         );
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> response = restClient.post()
-                .uri("/api/v1/firewall/nat/port_forward")
-                .body(body)
-                .retrieve()
-                .body(Map.class);
+        Map<String, Object> response;
+        try {
+            response = restClient.post()
+                    .uri("/api/v1/firewall/nat/port_forward")
+                    .body(body)
+                    .retrieve()
+                    .body(Map.class);
+        } catch (Exception e) {
+            throw new PfSenseException(e.getMessage(), e);
+        }
 
         if (response == null || !response.containsKey("data")) {
-            throw new RuntimeException("Unexpected pfSense API response");
+            throw new PfSenseException("Unerwartete Antwort von pfSense", null);
         }
 
         @SuppressWarnings("unchecked")
@@ -80,10 +86,14 @@ public class PfSenseApiClient {
      */
     public void deleteNatRule(String pfSenseRuleId) {
         log.info("Deleting pfSense NAT rule: {}", pfSenseRuleId);
-        restClient.delete()
-                .uri("/api/v1/firewall/nat/port_forward?id=" + pfSenseRuleId)
-                .retrieve()
-                .toBodilessEntity();
+        try {
+            restClient.delete()
+                    .uri("/api/v1/firewall/nat/port_forward?id=" + pfSenseRuleId)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            throw new PfSenseException(e.getMessage(), e);
+        }
     }
 
     /**

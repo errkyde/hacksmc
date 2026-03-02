@@ -3,6 +3,7 @@ package com.hacksmc.controller;
 import com.hacksmc.entity.Policy;
 import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,7 @@ public class PolicyController {
     private final UserRepository userRepository;
 
     @GetMapping
+    @Transactional
     public List<Policy> getPolicies(Principal principal) {
         return userRepository.findByUsername(principal.getName())
                 .map(user -> policyRepository.findByHostUserId(user.getId()))

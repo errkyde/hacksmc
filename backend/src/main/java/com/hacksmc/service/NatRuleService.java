@@ -28,6 +28,7 @@ public class NatRuleService {
     private final PfSenseApiClient pfSenseApiClient;
     private final AuditLogService auditLogService;
 
+    @Transactional(readOnly = true)
     public List<NatRule> getRulesForUser(String username) {
         User user = getUser(username);
         return natRuleRepository.findByUserId(user.getId());
