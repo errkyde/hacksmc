@@ -109,6 +109,15 @@
   background-size: 28px 28px;
 }
 
+/* Reload cooldown outline */
+@keyframes cooldown-outline {
+  from { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; opacity: 1; }
+  to   { outline: 2px solid transparent;         outline-offset: 2px; opacity: 1; }
+}
+.cooldown-btn {
+  animation: cooldown-outline 5s linear forwards;
+}
+
 /* Pulsing status indicator */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }

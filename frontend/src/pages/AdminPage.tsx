@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment, type FormEvent } from 'react'
 import Layout from '@/components/Layout'
 import {
   useAdminUsers,
@@ -58,6 +58,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, Activity, Clock } from 'lucide-react'
+
+// ─── Hooks ────────────────────────────────────────────────────────────────────
+
+function useCooldown(ms: number) {
+  const [cooling, setCooling] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const trigger = useCallback((fn: () => void) => {
+    if (cooling) return
+    fn()
+    setCooling(true)
+    timerRef.current = setTimeout(() => setCooling(false), ms)
+  }, [cooling, ms])
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+
+  return { cooling, trigger }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -298,6 +316,7 @@ function AuditLogTab() {
   const [actionFilter, setActionFilter] = useState('')
 
   const { data, isLoading, refetch } = useAuditLog({ page, size: pageSize, actor: actorFilter || undefined, action: actionFilter || undefined })
+  const { cooling: auditCooling, trigger: auditTrigger } = useCooldown(5000)
   const entries: AuditLogEntry[] = data?.content ?? []
   const totalPages = data?.totalPages ?? 0
   const totalElements = data?.totalElements ?? 0
@@ -328,9 +347,9 @@ function AuditLogTab() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="h-8 px-3 rounded-md border bg-card hover:bg-accent disabled:opacity-50 text-sm text-foreground"
+            onClick={() => auditTrigger(() => refetch())}
+            disabled={auditCooling || isLoading}
+            className={cn('h-8 px-3 rounded-md border bg-card hover:bg-accent disabled:opacity-50 text-sm text-foreground', auditCooling && 'cooldown-btn')}
           >
             {isLoading ? '…' : '↻ Aktualisieren'}
           </button>
@@ -1916,6 +1935,7 @@ function UsersTab() {
 
 function PfSenseTab() {
   const { data, isLoading, isFetching, dataUpdatedAt, refetch } = usePfSenseStatus()
+  const { cooling: pfCooling, trigger: pfTrigger } = useCooldown(5000)
   const up = data?.status === 'UP'
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleString('de-DE')
@@ -1933,8 +1953,9 @@ function PfSenseTab() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
+          onClick={() => pfTrigger(() => refetch())}
+          disabled={pfCooling || isFetching}
+          className={cn(pfCooling && 'cooldown-btn')}
         >
           <RefreshCw className={cn('h-4 w-4 mr-2', isFetching && 'animate-spin')} />
           Jetzt testen
