@@ -395,7 +395,7 @@ function ResetPasswordDialog({
         <DialogHeader>
           <DialogTitle>
             {done ? 'Passwort zurückgesetzt' : (
-              <>Passwort für <span className="font-mono text-primary">@{user.username}</span> zurücksetzen</>
+              <>Passwort für <span className="font-mono text-primary">{user.username}</span> zurücksetzen</>
             )}
           </DialogTitle>
         </DialogHeader>
