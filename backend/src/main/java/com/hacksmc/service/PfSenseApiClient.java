@@ -64,7 +64,7 @@ public class PfSenseApiClient {
      */
     public String createNatRule(String destIp, String protocol, int port, String hostname, String userDescription, Long dbRuleId) {
         String tag = TAG_PREFIX + dbRuleId + TAG_SUFFIX;
-        String descr = hostname + " : " + tag + " - " + userDescription;
+        String descr = "<" + hostname + "> : " + tag + " - " + userDescription;
 
         log.info("Creating pfSense NAT rule: {}:{}/{} descr={}", destIp, port, protocol, descr);
 
