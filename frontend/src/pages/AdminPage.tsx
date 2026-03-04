@@ -389,7 +389,7 @@ function ResetPasswordDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[380px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
+      <DialogContent className="sm:max-w-[380px] border-t-destructive/60 border-t-2">
         <DialogHeader>
           <DialogTitle>
             {done ? 'Passwort zurückgesetzt' : (
@@ -526,7 +526,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
+      <DialogContent className="sm:max-w-[400px] border-t-destructive/60 border-t-2">
         <DialogHeader>
           <DialogTitle>
             {created ? 'Benutzer erstellt' : 'Neuen Benutzer anlegen'}
@@ -685,7 +685,7 @@ function CreateGlobalHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[420px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
+      <DialogContent className="sm:max-w-[420px] border-t-destructive/60 border-t-2">
         <DialogHeader>
           <DialogTitle>Neuen Host anlegen</DialogTitle>
         </DialogHeader>
@@ -808,7 +808,7 @@ function AssignHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[440px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
+      <DialogContent className="sm:max-w-[440px] border-t-destructive/60 border-t-2">
         <DialogHeader>
           <DialogTitle>Host zuweisen</DialogTitle>
         </DialogHeader>
@@ -912,7 +912,7 @@ function EditPolicyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
+      <DialogContent className="sm:max-w-[400px] border-t-destructive/60 border-t-2">
         <DialogHeader>
           <DialogTitle>
             Berechtigung bearbeiten —{' '}
@@ -1109,7 +1109,7 @@ function UserOverviewDialog({ username, userId, open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] border-t-destructive/60 border-t-2 max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="font-mono text-primary">{username}</span>
