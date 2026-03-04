@@ -62,11 +62,9 @@ public class PfSenseApiClient {
      * Embeds [hsmc:{dbRuleId}] in the description for reliable identification.
      * Stores the dbRuleId as pfSenseRuleId in the DB.
      */
-    public String createNatRule(String destIp, String protocol, int port, String userDescription, Long dbRuleId) {
+    public String createNatRule(String destIp, String protocol, int port, String hostname, String userDescription, Long dbRuleId) {
         String tag = TAG_PREFIX + dbRuleId + TAG_SUFFIX;
-        String descr = (userDescription != null && !userDescription.isBlank())
-                ? userDescription + " " + tag
-                : "HackSMC rule #" + dbRuleId + " " + tag;
+        String descr = hostname + " " + tag + " " + userDescription;
 
         log.info("Creating pfSense NAT rule: {}:{}/{} descr={}", destIp, port, protocol, descr);
 

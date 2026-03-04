@@ -98,7 +98,7 @@ public class NatRuleService {
         // Call pfSense — embeds [hsmc:{id}] tag in description for stable identification
         String pfSenseId = pfSenseApiClient.createNatRule(
                 host.getIpAddress(), request.protocol(), request.port(),
-                request.description(), rule.getId()
+                host.getName(), request.description(), rule.getId()
         );
 
         rule.setPfSenseRuleId(pfSenseId);

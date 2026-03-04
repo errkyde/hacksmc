@@ -74,7 +74,7 @@ export default function NatRulesPage() {
   const [port, setPort] = useState('')
   const [description, setDescription] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'ALL' | NatRule['status']>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | NatRule['status']>('ACTIVE')
 
   const selectedPolicy = policies.find((p) => p.host.id === Number(selectedHostId))
   const allowedProtocols = selectedPolicy
@@ -107,7 +107,7 @@ export default function NatRulesPage() {
         hostId: Number(selectedHostId),
         protocol,
         port: Number(port),
-        description: description.trim() || undefined,
+        description: description.trim(),
       })
       setDialogOpen(false)
       resetForm()
@@ -156,7 +156,6 @@ export default function NatRulesPage() {
             <SelectContent>
               <SelectItem value="ALL">All</SelectItem>
               <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="PENDING">Pending</SelectItem>
               <SelectItem value="DELETED">Deleted</SelectItem>
             </SelectContent>
           </Select>
@@ -239,16 +238,14 @@ export default function NatRulesPage() {
 
               {/* Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="description">
-                  Description{' '}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
+                <Label htmlFor="description">Description</Label>
                 <Input
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. Minecraft server"
-                  maxLength={255}
+                  placeholder="e.g. MC"
+                  maxLength={8}
+                  required
                 />
               </div>
             </form>
@@ -260,7 +257,7 @@ export default function NatRulesPage() {
               <Button
                 type="submit"
                 form="create-rule-form"
-                disabled={createMutation.isPending || !selectedHostId || !protocol || !port}
+                disabled={createMutation.isPending || !selectedHostId || !protocol || !port || !description}
               >
                 {createMutation.isPending ? 'Creating…' : 'Create Rule'}
               </Button>
