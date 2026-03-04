@@ -2,6 +2,7 @@ package com.hacksmc.controller;
 
 import com.hacksmc.dto.*;
 import com.hacksmc.service.AdminService;
+import com.hacksmc.service.NetworkScanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final NetworkScanService networkScanService;
 
     // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -115,5 +117,12 @@ public class AdminController {
     @GetMapping("/pfsense/status")
     public PfSenseStatusResponse getPfSenseStatus() {
         return adminService.getPfSenseStatus();
+    }
+
+    // ── Network Scan ───────────────────────────────────────────────────────────
+
+    @PostMapping("/hosts/scan")
+    public List<ScannedHostResult> scanNetwork(@Valid @RequestBody NetworkScanRequest req) {
+        return networkScanService.scan(req.getSubnet());
     }
 }

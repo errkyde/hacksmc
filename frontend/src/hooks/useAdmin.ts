@@ -203,6 +203,21 @@ export function useAuditLog() {
   })
 }
 
+// ── Network Scan ───────────────────────────────────────────────────────────────
+
+export interface ScannedHost {
+  ipAddress: string
+  hostname: string | null
+  latencyMs: number
+}
+
+export function useNetworkScan() {
+  return useMutation({
+    mutationFn: (subnet: string) =>
+      api.post<ScannedHost[]>('/api/admin/hosts/scan', { subnet }).then((r) => r.data),
+  })
+}
+
 // ── pfSense Status ─────────────────────────────────────────────────────────────
 
 export interface PfSenseStatus {

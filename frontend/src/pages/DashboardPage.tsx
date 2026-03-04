@@ -3,6 +3,7 @@ import Layout from '@/components/Layout'
 import { useHosts } from '@/hooks/useHosts'
 import { useNatRules } from '@/hooks/useNatRules'
 import { usePolicies } from '@/hooks/usePolicies'
+import { useHostStatus } from '@/hooks/useHostStatus'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -13,6 +14,7 @@ export default function DashboardPage() {
   const { data: hosts = [], isLoading: hostsLoading } = useHosts()
   const { data: rules = [], isLoading: rulesLoading } = useNatRules()
   const { data: policies = [] } = usePolicies()
+  const { data: hostStatus = {}, isLoading: statusLoading } = useHostStatus()
 
   const activeRules = rules.filter((r) => r.status === 'ACTIVE')
   const pendingRules = rules.filter((r) => r.status === 'PENDING')
@@ -88,6 +90,8 @@ export default function DashboardPage() {
             const maxRules = policy?.maxRules ?? 0
             const usage = maxRules > 0 ? hostActiveRules.length / maxRules : 0
             const atLimit = hostActiveRules.length >= maxRules && maxRules > 0
+            const online = hostStatus[host.id]
+            const statusKnown = !statusLoading && host.id in hostStatus
 
             return (
               <Card key={host.id} className="hover:border-primary/30 transition-colors">
@@ -99,8 +103,23 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground mt-0.5">{host.description}</p>
                       )}
                     </div>
-                    <span className="flex items-center gap-1.5 mt-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
+                    <span
+                      className="flex items-center gap-1.5 mt-0.5"
+                      title={!statusKnown ? 'Checking…' : online ? 'Online' : 'Offline'}
+                    >
+                      {!statusKnown ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse" />
+                      ) : online ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      )}
+                      <span className={cn(
+                        'text-[10px] font-mono',
+                        !statusKnown ? 'text-muted-foreground/40' : online ? 'text-emerald-500' : 'text-red-500'
+                      )}>
+                        {!statusKnown ? '…' : online ? 'online' : 'offline'}
+                      </span>
                     </span>
                   </div>
                   <p className="font-mono text-xs text-primary">{host.ipAddress}</p>

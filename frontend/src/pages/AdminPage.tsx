@@ -13,11 +13,13 @@ import {
   useAllHosts,
   useCreateGlobalHost,
   useDeleteGlobalHost,
+  useNetworkScan,
   useAdminRules,
   useAuditLog,
   usePfSenseStatus,
   type AdminUser,
   type HostDto,
+  type ScannedHost,
   type AdminNatRule,
   type AuditLogEntry,
 } from '@/hooks/useAdmin'
@@ -50,7 +52,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText, Wifi } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1076,10 +1078,14 @@ function UserHostsSection({ user }: { user: AdminUser }) {
 function HostsTab() {
   const { data: hosts = [], isLoading } = useAllHosts()
   const deleteHost = useDeleteGlobalHost()
+  const networkScan = useNetworkScan()
   const { toast } = useToast()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [subnet, setSubnet] = useState('')
+  const [scanResults, setScanResults] = useState<ScannedHost[] | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   async function handleDelete(hostId: number) {
     try {
@@ -1091,6 +1097,21 @@ function HostsTab() {
       setDeleteConfirmId(null)
     }
   }
+
+  async function handleScan(e: React.FormEvent) {
+    e.preventDefault()
+    setScanError(null)
+    setScanResults(null)
+    try {
+      const results = await networkScan.mutateAsync(subnet)
+      setScanResults(results)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Scan fehlgeschlagen'
+      setScanError(msg)
+    }
+  }
+
+  const existingIps = new Set(hosts.map((h) => h.ipAddress))
 
   return (
     <div>
@@ -1174,6 +1195,113 @@ function HostsTab() {
               ))}
             </TableBody>
           </Table>
+        )}
+      </div>
+
+      {/* ── Network Scan ─────────────────────────────────────────────────────── */}
+      <div className="mt-8">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold">Netzwerk-Scan</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Erreichbare Hosts im Netzwerk ermitteln (z.B. 192.168.1.0/24)
+          </p>
+        </div>
+
+        <form onSubmit={handleScan} className="flex gap-2 mb-4">
+          <Input
+            placeholder="192.168.1.0/24"
+            value={subnet}
+            onChange={(e) => setSubnet(e.target.value)}
+            className="font-mono max-w-56"
+            disabled={networkScan.isPending}
+          />
+          <Button type="submit" variant="outline" disabled={networkScan.isPending || !subnet.trim()}>
+            {networkScan.isPending ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                Scannt…
+              </>
+            ) : (
+              <>
+                <ScanLine className="h-4 w-4 mr-1.5" />
+                Scan starten
+              </>
+            )}
+          </Button>
+        </form>
+
+        {scanError && (
+          <div className="flex items-center gap-2 text-sm text-destructive mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {scanError}
+          </div>
+        )}
+
+        {scanResults !== null && (
+          <div className="rounded-xl border bg-card overflow-hidden">
+            {scanResults.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Keine erreichbaren Hosts gefunden.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>IP-Adresse</TableHead>
+                    <TableHead>Hostname</TableHead>
+                    <TableHead>Latenz</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {scanResults.map((host) => {
+                    const alreadyAdded = existingIps.has(host.ipAddress)
+                    return (
+                      <TableRow key={host.ipAddress}>
+                        <TableCell className="font-mono text-sm">{host.ipAddress}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground font-mono">
+                          {host.hostname ?? <span className="italic text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {host.latencyMs} ms
+                        </TableCell>
+                        <TableCell>
+                          {alreadyAdded ? (
+                            <span className="text-xs text-muted-foreground italic">bereits angelegt</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-500">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              erreichbar
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {!alreadyAdded && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                setCreateOpen(true)
+                              }}
+                              title="Als Host anlegen"
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              Anlegen
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+            <div className="px-4 py-2 border-t text-xs text-muted-foreground">
+              {scanResults.length} erreichbare Host{scanResults.length !== 1 ? 's' : ''} gefunden
+            </div>
+          </div>
         )}
       </div>
 
