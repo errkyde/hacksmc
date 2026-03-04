@@ -39,8 +39,8 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public AuditLogPage getPage(int page, int size, String actor, String action) {
         Page<AuditLog> result = auditLogRepository.findFiltered(
-                (actor == null || actor.isBlank()) ? null : actor,
-                (action == null || action.isBlank()) ? null : action,
+                (actor == null || actor.isBlank()) ? "" : actor,
+                (action == null || action.isBlank()) ? "" : action,
                 PageRequest.of(page, size));
         List<AuditLogEntry> content = result.getContent().stream()
                 .map(e -> new AuditLogEntry(e.getId(), e.getTs(), e.getActor(),

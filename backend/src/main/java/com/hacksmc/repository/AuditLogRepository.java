@@ -15,8 +15,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
     @Query("""
         SELECT e FROM AuditLog e
-        WHERE (CAST(:actor AS string) IS NULL OR LOWER(e.actor) = LOWER(:actor))
-          AND (CAST(:action AS string) IS NULL OR e.action = :action)
+        WHERE (:actor = '' OR LOWER(e.actor) = LOWER(:actor))
+          AND (:action = '' OR e.action = :action)
         ORDER BY e.ts DESC
         """)
     Page<AuditLog> findFiltered(
