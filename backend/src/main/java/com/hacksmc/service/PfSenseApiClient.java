@@ -107,8 +107,9 @@ public class PfSenseApiClient {
         int arrayId = findArrayIdByHsmcId(pfSenseRuleId);
         log.info("Resolved hsmc-id {} to array index {}", pfSenseRuleId, arrayId);
         try {
-            restClient.delete()
-                    .uri("/api/v2/firewall/nat/port_forward/" + arrayId)
+            restClient.method(org.springframework.http.HttpMethod.DELETE)
+                    .uri("/api/v2/firewall/nat/port_forward")
+                    .body(Map.of("id", arrayId))
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
