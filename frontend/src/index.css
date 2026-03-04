@@ -7,24 +7,24 @@
 @layer base {
   /* ── Light mode (default) ── */
   :root {
-    --background: 0 0% 100%;
+    --background: 216 20% 93%;
     --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
+    --card: 216 18% 97%;
     --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
+    --popover: 216 18% 97%;
     --popover-foreground: 222 47% 11%;
     --primary: 199 89% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 94%;
+    --secondary: 210 25% 87%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 94%;
+    --muted: 210 25% 87%;
     --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 94%;
+    --accent: 210 25% 87%;
     --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
+    --border: 214 22% 82%;
+    --input: 214 22% 82%;
     --ring: 199 89% 40%;
     --radius: 0.5rem;
     --chart-1: 12 76% 61%;
