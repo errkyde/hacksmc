@@ -7,6 +7,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.NoSuchElementException;
 
 @RestControllerAdvice
@@ -36,6 +38,12 @@ public class GlobalExceptionHandler {
     public ProblemDetail handlePfSense(PfSenseException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
                 "pfSense nicht erreichbar: " + ex.getMessage());
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.valueOf(ex.getStatusCode().value()), ex.getReason());
     }
 
     @ExceptionHandler(RuntimeException.class)

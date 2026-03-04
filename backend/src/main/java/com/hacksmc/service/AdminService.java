@@ -129,6 +129,9 @@ public class AdminService {
     }
 
     public HostDto createHost(CreateHostRequest req) {
+        if (hostRepository.existsByIpAddress(req.ipAddress())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "IP address already exists");
+        }
         Host host = new Host();
         host.setName(req.name());
         host.setIpAddress(req.ipAddress());
@@ -141,7 +144,7 @@ public class AdminService {
         Host host = hostRepository.findById(hostId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host not found"));
         host.setName(req.name());
-        host.setDescription(req.description());
+        if (req.description() != null) host.setDescription(req.description());
         hostRepository.save(host);
         return toHostDtoWithStats(host, null);
     }
