@@ -10,6 +10,7 @@ import java.net.Socket;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
 
 @Service
 @Slf4j
@@ -18,10 +19,16 @@ public class HostPingService {
     private static final int TIMEOUT_MS = 2000;
 
     public Map<Long, Boolean> checkHosts(List<Host> hosts) {
-        Map<Long, Boolean> result = new HashMap<>();
+        if (hosts.isEmpty()) return Map.of();
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(hosts.size(), 32));
+        Map<Long, Future<Boolean>> futures = new HashMap<>();
         for (Host host : hosts) {
-            result.put(host.getId(), isReachable(host.getIpAddress()));
+            futures.put(host.getId(), pool.submit(() -> isReachable(host.getIpAddress())));
         }
+        pool.shutdown();
+        try { pool.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        Map<Long, Boolean> result = new HashMap<>();
+        futures.forEach((id, f) -> { try { result.put(id, f.get()); } catch (Exception e) { result.put(id, false); } });
         return result;
     }
 
