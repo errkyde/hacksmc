@@ -1512,7 +1512,7 @@ function HostsTab() {
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs"
-                              onClick={() => openCreateWithPrefill(host.hostname ?? host.ipAddress, host.ipAddress)}
+                              onClick={() => openCreateWithPrefill(host.hostname ?? '', host.ipAddress)}
                               title="Als Host anlegen"
                             >
                               <Plus className="h-3.5 w-3.5 mr-1" />
