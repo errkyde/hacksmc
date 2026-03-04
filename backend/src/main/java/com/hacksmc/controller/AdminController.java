@@ -68,10 +68,16 @@ public class AdminController {
         return adminService.createHost(req);
     }
 
+    @PatchMapping("/hosts/{hostId}")
+    public HostDto updateHost(@PathVariable Long hostId, @Valid @RequestBody UpdateHostRequest req) {
+        return adminService.updateHost(hostId, req);
+    }
+
     @DeleteMapping("/hosts/{hostId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteHost(@PathVariable Long hostId) {
-        adminService.deleteHost(hostId);
+    public void deleteHost(@PathVariable Long hostId,
+                           @RequestParam(defaultValue = "false") boolean deleteRules) {
+        adminService.deleteHost(hostId, deleteRules);
     }
 
     // ── User-Host Assignments ──────────────────────────────────────────────────

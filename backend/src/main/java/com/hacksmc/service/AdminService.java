@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NatRuleStatus;
 
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -135,9 +137,25 @@ public class AdminService {
         return toHostDto(host, null);
     }
 
-    public void deleteHost(Long hostId) {
+    public HostDto updateHost(Long hostId, UpdateHostRequest req) {
+        Host host = hostRepository.findById(hostId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host not found"));
+        host.setName(req.name());
+        host.setDescription(req.description());
+        hostRepository.save(host);
+        return toHostDtoWithStats(host, null);
+    }
+
+    public void deleteHost(Long hostId, boolean deleteRules) {
         if (!hostRepository.existsById(hostId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Host not found");
+        }
+        if (deleteRules) {
+            List<NatRule> active = natRuleRepository.findByHostIdAndStatusIn(
+                    hostId, List.of(NatRuleStatus.ACTIVE, NatRuleStatus.PENDING));
+            Instant now = Instant.now();
+            active.forEach(r -> { r.setStatus(NatRuleStatus.DELETED); r.setDeletedAt(now); });
+            natRuleRepository.saveAll(active);
         }
         hostRepository.deleteById(hostId);
     }

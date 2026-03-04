@@ -119,11 +119,27 @@ export function useCreateGlobalHost() {
   })
 }
 
+export function useUpdateHost() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ hostId, name, description }: { hostId: number; name: string; description?: string }) =>
+      api.patch<HostDto>(`/api/admin/hosts/${hostId}`, { name, description }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'hosts'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'rules'] })
+    },
+  })
+}
+
 export function useDeleteGlobalHost() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (hostId: number) => api.delete(`/api/admin/hosts/${hostId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'hosts'] }),
+    mutationFn: ({ hostId, deleteRules }: { hostId: number; deleteRules: boolean }) =>
+      api.delete(`/api/admin/hosts/${hostId}`, { params: { deleteRules } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'hosts'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'rules'] })
+    },
   })
 }
 

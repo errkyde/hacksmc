@@ -20,6 +20,8 @@ public interface NatRuleRepository extends JpaRepository<NatRule, Long> {
 
     long countByHostIdAndStatus(Long hostId, NatRuleStatus status);
 
+    List<NatRule> findByHostIdAndStatusIn(Long hostId, List<NatRuleStatus> statuses);
+
     /** Globale Port-Belegungsprüfung — unabhängig von Nutzer oder Host */
     boolean existsByPortAndStatusIn(int port, List<NatRuleStatus> statuses);
 

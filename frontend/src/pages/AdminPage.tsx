@@ -12,6 +12,7 @@ import {
   useUpdatePolicy,
   useAllHosts,
   useCreateGlobalHost,
+  useUpdateHost,
   useDeleteGlobalHost,
   useNetworkScan,
   useAdminHostStatus,
@@ -1257,6 +1258,7 @@ function HostsTab() {
   const { data: hosts = [], isLoading } = useAllHosts()
   const { data: hostStatus = {}, isLoading: statusLoading } = useAdminHostStatus()
   const deleteHost = useDeleteGlobalHost()
+  const updateHost = useUpdateHost()
   const networkScan = useNetworkScan()
   const { toast } = useToast()
 
@@ -1264,6 +1266,9 @@ function HostsTab() {
   const [prefillName, setPrefillName] = useState('')
   const [prefillIp, setPrefillIp] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [deleteRulesConfirm, setDeleteRulesConfirm] = useState<'ask' | 'yes' | 'no' | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
   const [subnet, setSubnet] = useState('')
   const [scanResults, setScanResults] = useState<ScannedHost[] | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
@@ -1281,14 +1286,28 @@ function HostsTab() {
     setCreateOpen(true)
   }
 
-  async function handleDelete(hostId: number) {
+  async function handleDelete(hostId: number, deleteRules: boolean) {
     try {
-      await deleteHost.mutateAsync(hostId)
+      await deleteHost.mutateAsync({ hostId, deleteRules })
       setDeleteConfirmId(null)
+      setDeleteRulesConfirm(null)
       toast({ title: 'Host gelöscht' })
     } catch {
-      toast({ title: 'Fehler', description: 'Host konnte nicht gelöscht werden. Möglicherweise existieren noch aktive NAT-Regeln.', variant: 'destructive' })
+      toast({ title: 'Fehler', description: 'Host konnte nicht gelöscht werden.', variant: 'destructive' })
       setDeleteConfirmId(null)
+      setDeleteRulesConfirm(null)
+    }
+  }
+
+  async function handleRename(hostId: number) {
+    const name = editName.trim()
+    if (!name) return
+    try {
+      await updateHost.mutateAsync({ hostId, name })
+      setEditingId(null)
+      toast({ title: 'Host umbenannt' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Name konnte nicht geändert werden.', variant: 'destructive' })
     }
   }
 
@@ -1349,7 +1368,27 @@ function HostsTab() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <CardTitle className="text-sm font-medium truncate">{host.name}</CardTitle>
+                      {editingId === host.id ? (
+                        <form onSubmit={(e) => { e.preventDefault(); handleRename(host.id) }} className="flex items-center gap-1 flex-1">
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onBlur={() => handleRename(host.id)}
+                            onKeyDown={(e) => { if (e.key === 'Escape') setEditingId(null) }}
+                            className="text-sm font-medium bg-transparent border-b border-primary outline-none w-full font-mono"
+                            maxLength={128}
+                          />
+                        </form>
+                      ) : (
+                        <CardTitle
+                          className="text-sm font-medium truncate cursor-pointer hover:text-primary transition-colors"
+                          title="Klicken zum Umbenennen"
+                          onClick={() => { setEditingId(host.id); setEditName(host.name) }}
+                        >
+                          {host.name}
+                        </CardTitle>
+                      )}
                       {(() => {
                         const known = !statusLoading && host.id in hostStatus
                         const online = hostStatus[host.id]
@@ -1375,32 +1414,38 @@ function HostsTab() {
                   </div>
                   <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {deleteConfirmId === host.id ? (
-                      <>
-                        <span className="text-xs text-muted-foreground mr-1">Löschen?</span>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-6 px-2 text-xs"
-                          disabled={deleteHost.isPending}
-                          onClick={() => handleDelete(host.id)}
-                        >
-                          Ja
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => setDeleteConfirmId(null)}
-                        >
-                          Nein
-                        </Button>
-                      </>
+                      deleteRulesConfirm === 'ask' ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[10px] text-muted-foreground">Aktive Regeln mit löschen?</span>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-6 px-2 text-xs" disabled={deleteHost.isPending}
+                              onClick={() => handleDelete(host.id, true)}>Ja</Button>
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={deleteHost.isPending}
+                              onClick={() => handleDelete(host.id, false)}>Nein</Button>
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
+                              onClick={() => { setDeleteConfirmId(null); setDeleteRulesConfirm(null) }}>Abbruch</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[10px] text-muted-foreground">Host löschen?</span>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-6 px-2 text-xs"
+                              onClick={() => {
+                                if (host.activeRuleCount > 0) setDeleteRulesConfirm('ask')
+                                else handleDelete(host.id, false)
+                              }}>Ja</Button>
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
+                              onClick={() => { setDeleteConfirmId(null); setDeleteRulesConfirm(null) }}>Nein</Button>
+                          </div>
+                        </div>
+                      )
                     ) : (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteConfirmId(host.id)}
+                        onClick={() => { setDeleteConfirmId(host.id); setDeleteRulesConfirm(null) }}
                         title="Host löschen"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
