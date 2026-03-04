@@ -61,12 +61,14 @@ import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Use
 
 function RoleBadge({ role }: { role: string }) {
   return (
-    <Badge
-      variant={role === 'ADMIN' ? 'default' : 'secondary'}
-      className="font-mono text-xs"
-    >
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border',
+      role === 'ADMIN'
+        ? 'bg-red-500/15 text-red-400 border-red-500/30'
+        : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+    )}>
       {role}
-    </Badge>
+    </span>
   )
 }
 
@@ -387,7 +389,7 @@ function ResetPasswordDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[380px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04]">
+      <DialogContent className="sm:max-w-[380px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
         <DialogHeader>
           <DialogTitle>
             {done ? 'Passwort zurückgesetzt' : (
@@ -524,7 +526,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04]">
+      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
         <DialogHeader>
           <DialogTitle>
             {created ? 'Benutzer erstellt' : 'Neuen Benutzer anlegen'}
@@ -683,7 +685,7 @@ function CreateGlobalHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[420px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04]">
+      <DialogContent className="sm:max-w-[420px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
         <DialogHeader>
           <DialogTitle>Neuen Host anlegen</DialogTitle>
         </DialogHeader>
@@ -806,7 +808,7 @@ function AssignHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[440px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04]">
+      <DialogContent className="sm:max-w-[440px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
         <DialogHeader>
           <DialogTitle>Host zuweisen</DialogTitle>
         </DialogHeader>
@@ -910,7 +912,7 @@ function EditPolicyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04]">
+      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02]">
         <DialogHeader>
           <DialogTitle>
             Berechtigung bearbeiten —{' '}
@@ -1107,14 +1109,19 @@ function UserOverviewDialog({ username, userId, open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.04] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] border-destructive/25 border-t-destructive/50 border-t-2 bg-destructive/[0.02] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span className="font-mono text-primary">@{username}</span>
+            <span className="font-mono text-primary">{username}</span>
             {data && (
-              <Badge variant={data.role === 'ADMIN' ? 'default' : 'secondary'} className="font-mono text-xs">
+              <span className={cn(
+                'inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border',
+                data.role === 'ADMIN'
+                  ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                  : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+              )}>
                 {data.role}
-              </Badge>
+              </span>
             )}
             {data && !data.enabled && (
               <span className="text-xs text-destructive font-normal">(gesperrt)</span>
