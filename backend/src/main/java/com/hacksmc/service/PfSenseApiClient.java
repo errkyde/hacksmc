@@ -108,7 +108,7 @@ public class PfSenseApiClient {
         log.info("Resolved hsmc-id {} to array index {}", pfSenseRuleId, arrayId);
         try {
             restClient.delete()
-                    .uri("/api/v2/firewall/nat/port_forward?id=" + arrayId)
+                    .uri("/api/v2/firewall/nat/port_forward/" + arrayId)
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
