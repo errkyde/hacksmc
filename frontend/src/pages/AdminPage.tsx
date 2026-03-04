@@ -14,6 +14,7 @@ import {
   useCreateGlobalHost,
   useDeleteGlobalHost,
   useNetworkScan,
+  useAdminHostStatus,
   useUserOverview,
   useAdminRules,
   useAuditLog,
@@ -1254,6 +1255,7 @@ function UserOverviewDialog({ username, userId, open, onOpenChange }: {
 
 function HostsTab() {
   const { data: hosts = [], isLoading } = useAllHosts()
+  const { data: hostStatus = {}, isLoading: statusLoading } = useAdminHostStatus()
   const deleteHost = useDeleteGlobalHost()
   const networkScan = useNetworkScan()
   const { toast } = useToast()
@@ -1345,8 +1347,30 @@ function HostsTab() {
             <Card key={host.id} className="group hover:border-primary/30 transition-colors flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <CardTitle className="text-sm font-medium truncate">{host.name}</CardTitle>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-sm font-medium truncate">{host.name}</CardTitle>
+                      {(() => {
+                        const known = !statusLoading && host.id in hostStatus
+                        const online = hostStatus[host.id]
+                        return (
+                          <span
+                            title={!known ? 'Checking…' : online ? 'Online' : 'Offline'}
+                            className="flex items-center gap-1 shrink-0"
+                          >
+                            {!known
+                              ? <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse" />
+                              : online
+                                ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
+                                : <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            }
+                            <span className={cn('text-[10px] font-mono', !known ? 'text-muted-foreground/40' : online ? 'text-emerald-500' : 'text-red-500')}>
+                              {!known ? '…' : online ? 'online' : 'offline'}
+                            </span>
+                          </span>
+                        )
+                      })()}
+                    </div>
                     <p className="font-mono text-xs text-primary mt-0.5">{host.ipAddress}</p>
                   </div>
                   <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1415,7 +1439,7 @@ function HostsTab() {
                         onClick={() => setOverviewUser({ id: u.id, username: u.username })}
                         className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border hover:border-primary/50 hover:text-primary transition-colors cursor-pointer"
                       >
-                        @{u.username}
+                        {u.username}
                       </button>
                     ))}
                   </div>

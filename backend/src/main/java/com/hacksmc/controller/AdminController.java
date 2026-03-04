@@ -2,6 +2,7 @@ package com.hacksmc.controller;
 
 import com.hacksmc.dto.*;
 import com.hacksmc.service.AdminService;
+import com.hacksmc.service.HostPingService;
 import com.hacksmc.service.NetworkScanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -19,6 +21,8 @@ public class AdminController {
 
     private final AdminService adminService;
     private final NetworkScanService networkScanService;
+    private final HostPingService hostPingService;
+    private final com.hacksmc.repository.HostRepository hostRepository;
 
     // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +126,13 @@ public class AdminController {
     @GetMapping("/pfsense/status")
     public PfSenseStatusResponse getPfSenseStatus() {
         return adminService.getPfSenseStatus();
+    }
+
+    // ── Host Status ────────────────────────────────────────────────────────────
+
+    @GetMapping("/hosts/status")
+    public Map<Long, Boolean> getHostStatus() {
+        return hostPingService.checkHosts(hostRepository.findAll());
     }
 
     // ── Network Scan ───────────────────────────────────────────────────────────
