@@ -297,7 +297,7 @@ function AuditLogTab() {
   const [actorFilter, setActorFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
 
-  const { data, isLoading } = useAuditLog({ page, size: pageSize, actor: actorFilter || undefined, action: actionFilter || undefined })
+  const { data, isLoading, refetch } = useAuditLog({ page, size: pageSize, actor: actorFilter || undefined, action: actionFilter || undefined })
   const entries: AuditLogEntry[] = data?.content ?? []
   const totalPages = data?.totalPages ?? 0
   const totalElements = data?.totalElements ?? 0
@@ -323,10 +323,17 @@ function AuditLogTab() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Audit-Log</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isLoading ? '…' : `${totalElements} Einträge`} · wird alle 30 s aktualisiert
+            {isLoading ? '…' : `${totalElements} Einträge`}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="h-8 px-3 rounded-md border bg-card hover:bg-accent disabled:opacity-50 text-sm text-foreground"
+          >
+            {isLoading ? '…' : '↻ Aktualisieren'}
+          </button>
           <select
             value={actorFilter}
             onChange={(e) => handleActorChange(e.target.value)}

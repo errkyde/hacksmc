@@ -233,7 +233,6 @@ export function useAuditLog(params: { page: number; size: number; actor?: string
   return useQuery<AuditLogPage>({
     queryKey: ['admin', 'audit-log', params],
     queryFn: () => api.get('/api/admin/audit-log', { params }).then((r) => r.data),
-    refetchInterval: 30_000,
     placeholderData: (prev) => prev,
   })
 }
