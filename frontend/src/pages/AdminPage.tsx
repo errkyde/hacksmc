@@ -51,6 +51,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle } from 'lucide-react'
 
@@ -639,15 +640,27 @@ function CreateUserDialog({
 function CreateGlobalHostDialog({
   open,
   onOpenChange,
+  initialName = '',
+  initialIp = '',
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
+  initialName?: string
+  initialIp?: string
 }) {
   const { toast } = useToast()
   const createHost = useCreateGlobalHost()
-  const [name, setName] = useState('')
-  const [ip, setIp] = useState('')
+  const [name, setName] = useState(initialName)
+  const [ip, setIp] = useState(initialIp)
   const [description, setDescription] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setName(initialName)
+      setIp(initialIp)
+      setDescription('')
+    }
+  }, [open, initialName, initialIp])
 
   function reset() { setName(''); setIp(''); setDescription('') }
 
@@ -694,7 +707,7 @@ function CreateGlobalHostDialog({
                 onChange={(e) => setIp(e.target.value)}
                 placeholder="192.168.10.50"
                 required
-                className="font-mono"
+                className={cn('font-mono', initialIp && 'text-muted-foreground')}
               />
             </div>
           </div>
@@ -708,6 +721,7 @@ function CreateGlobalHostDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="z.B. Minecraft Game Server"
               maxLength={255}
+              autoFocus={!!initialIp}
             />
           </div>
         </form>
@@ -1082,10 +1096,24 @@ function HostsTab() {
   const { toast } = useToast()
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [prefillName, setPrefillName] = useState('')
+  const [prefillIp, setPrefillIp] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [subnet, setSubnet] = useState('')
   const [scanResults, setScanResults] = useState<ScannedHost[] | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
+
+  function openCreateWithPrefill(name: string, ip: string) {
+    setPrefillName(name)
+    setPrefillIp(ip)
+    setCreateOpen(true)
+  }
+
+  function openCreateEmpty() {
+    setPrefillName('')
+    setPrefillIp('')
+    setCreateOpen(true)
+  }
 
   async function handleDelete(hostId: number) {
     try {
@@ -1122,49 +1150,49 @@ function HostsTab() {
             {isLoading ? '…' : `${hosts.length} Host${hosts.length !== 1 ? 's' : ''}`} · globale Ressourcen
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={openCreateEmpty}>
           <Plus className="h-4 w-4 mr-1.5" />
           Neuer Host
         </Button>
       </div>
 
-      <div className="rounded-xl border bg-card overflow-hidden">
-        {isLoading ? (
-          <div className="py-14 text-center text-sm text-muted-foreground">Lädt…</div>
-        ) : hosts.length === 0 ? (
-          <div className="py-16 text-center">
-            <Server className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Noch keine Hosts angelegt.</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Lege Hosts hier an und weise sie dann Benutzern zu.
-            </p>
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>IP-Adresse</TableHead>
-                <TableHead>Beschreibung</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {hosts.map((host) => (
-                <TableRow key={host.id}>
-                  <TableCell className="font-medium font-mono">{host.name}</TableCell>
-                  <TableCell className="font-mono text-sm text-muted-foreground">{host.ipAddress}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {host.description ?? <span className="italic text-xs">—</span>}
-                  </TableCell>
-                  <TableCell className="text-right">
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="pt-5">
+                <div className="h-4 bg-muted rounded w-28 mb-3" />
+                <div className="h-3 bg-muted rounded w-36" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : hosts.length === 0 ? (
+        <div className="rounded-xl border bg-card py-16 text-center">
+          <Server className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Noch keine Hosts angelegt.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Lege Hosts hier an und weise sie dann Benutzern zu.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {hosts.map((host) => (
+            <Card key={host.id} className="group hover:border-primary/30 transition-colors">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm font-medium truncate">{host.name}</CardTitle>
+                    <p className="font-mono text-xs text-primary mt-0.5">{host.ipAddress}</p>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {deleteConfirmId === host.id ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-xs text-muted-foreground">Löschen?</span>
+                      <>
+                        <span className="text-xs text-muted-foreground mr-1">Löschen?</span>
                         <Button
                           size="sm"
                           variant="destructive"
-                          className="h-7 px-2"
+                          className="h-6 px-2 text-xs"
                           disabled={deleteHost.isPending}
                           onClick={() => handleDelete(host.id)}
                         >
@@ -1173,30 +1201,35 @@ function HostsTab() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 px-2"
+                          className="h-6 px-2 text-xs"
                           onClick={() => setDeleteConfirmId(null)}
                         >
                           Nein
                         </Button>
-                      </span>
+                      </>
                     ) : (
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteConfirmId(host.id)}
                         title="Host löschen"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+                  </div>
+                </div>
+              </CardHeader>
+              {host.description && (
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground leading-relaxed">{host.description}</p>
+                </CardContent>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* ── Network Scan ─────────────────────────────────────────────────────── */}
       <div className="mt-8">
@@ -1282,9 +1315,7 @@ function HostsTab() {
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs"
-                              onClick={() => {
-                                setCreateOpen(true)
-                              }}
+                              onClick={() => openCreateWithPrefill(host.hostname ?? host.ipAddress, host.ipAddress)}
                               title="Als Host anlegen"
                             >
                               <Plus className="h-3.5 w-3.5 mr-1" />
@@ -1305,7 +1336,12 @@ function HostsTab() {
         )}
       </div>
 
-      <CreateGlobalHostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateGlobalHostDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialName={prefillName}
+        initialIp={prefillIp}
+      />
     </div>
   )
 }
