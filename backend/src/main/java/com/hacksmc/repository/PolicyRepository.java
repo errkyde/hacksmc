@@ -18,4 +18,9 @@ public interface PolicyRepository extends JpaRepository<Policy, Long> {
     boolean existsByUserIdAndHostId(Long userId, Long hostId);
 
     long countByUserId(Long userId);
+
+    long countByHostId(Long hostId);
+
+    @Query("SELECT p FROM Policy p JOIN FETCH p.user WHERE p.host.id = :hostId")
+    List<Policy> findByHostIdWithUser(@Param("hostId") Long hostId);
 }

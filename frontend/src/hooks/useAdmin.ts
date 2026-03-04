@@ -23,6 +23,9 @@ export interface HostDto {
   ipAddress: string
   description: string | null
   policy: PolicyDto | null
+  userCount: number
+  activeRuleCount: number
+  assignedUsers: string[]
 }
 
 export interface CreateUserInput {

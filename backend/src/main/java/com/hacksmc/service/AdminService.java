@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.hacksmc.entity.NatRuleStatus;
+
 import java.util.List;
 
 @Service
@@ -120,7 +122,7 @@ public class AdminService {
     @Transactional(readOnly = true)
     public List<HostDto> getAllHosts() {
         return hostRepository.findAll().stream()
-                .map(h -> toHostDto(h, null))
+                .map(h -> toHostDtoWithStats(h, null))
                 .toList();
     }
 
@@ -215,7 +217,26 @@ public class AdminService {
                 host.getName(),
                 host.getIpAddress(),
                 host.getDescription(),
-                policy != null ? toPolicyDto(policy) : null
+                policy != null ? toPolicyDto(policy) : null,
+                0, 0, List.of()
+        );
+    }
+
+    private HostDto toHostDtoWithStats(Host host, Policy policy) {
+        int userCount = (int) policyRepository.countByHostId(host.getId());
+        int activeRuleCount = (int) natRuleRepository.countByHostIdAndStatus(host.getId(), NatRuleStatus.ACTIVE);
+        List<String> assignedUsers = policyRepository.findByHostIdWithUser(host.getId()).stream()
+                .map(p -> p.getUser().getUsername())
+                .toList();
+        return new HostDto(
+                host.getId(),
+                host.getName(),
+                host.getIpAddress(),
+                host.getDescription(),
+                policy != null ? toPolicyDto(policy) : null,
+                userCount,
+                activeRuleCount,
+                assignedUsers
         );
     }
 

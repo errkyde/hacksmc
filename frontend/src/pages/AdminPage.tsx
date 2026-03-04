@@ -52,8 +52,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, Activity } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -385,7 +386,7 @@ function ResetPasswordDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[380px]">
+      <DialogContent className="sm:max-w-[380px] border-destructive/25 border-t-destructive/50 border-t-2">
         <DialogHeader>
           <DialogTitle>
             {done ? 'Passwort zurückgesetzt' : (
@@ -522,7 +523,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2">
         <DialogHeader>
           <DialogTitle>
             {created ? 'Benutzer erstellt' : 'Neuen Benutzer anlegen'}
@@ -681,7 +682,7 @@ function CreateGlobalHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[420px] border-destructive/25 border-t-destructive/50 border-t-2">
         <DialogHeader>
           <DialogTitle>Neuen Host anlegen</DialogTitle>
         </DialogHeader>
@@ -804,7 +805,7 @@ function AssignHostDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-[440px]">
+      <DialogContent className="sm:max-w-[440px] border-destructive/25 border-t-destructive/50 border-t-2">
         <DialogHeader>
           <DialogTitle>Host zuweisen</DialogTitle>
         </DialogHeader>
@@ -908,7 +909,7 @@ function EditPolicyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-[400px] border-destructive/25 border-t-destructive/50 border-t-2">
         <DialogHeader>
           <DialogTitle>
             Berechtigung bearbeiten —{' '}
@@ -1178,7 +1179,7 @@ function HostsTab() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {hosts.map((host) => (
-            <Card key={host.id} className="group hover:border-primary/30 transition-colors">
+            <Card key={host.id} className="group hover:border-primary/30 transition-colors flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -1220,12 +1221,44 @@ function HostsTab() {
                     )}
                   </div>
                 </div>
+                {host.description && (
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-1">{host.description}</p>
+                )}
               </CardHeader>
-              {host.description && (
-                <CardContent className="pt-0">
-                  <p className="text-xs text-muted-foreground leading-relaxed">{host.description}</p>
-                </CardContent>
-              )}
+
+              <Separator />
+
+              <CardContent className="pt-3 pb-3 flex-1 space-y-3">
+                {/* Stats row */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users2 className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-mono font-medium text-foreground">{host.userCount}</span>
+                    <span>{host.userCount === 1 ? 'User' : 'Users'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-mono font-medium text-foreground">{host.activeRuleCount}</span>
+                    <span>aktive {host.activeRuleCount === 1 ? 'Regel' : 'Regeln'}</span>
+                  </div>
+                </div>
+
+                {/* Assigned users */}
+                {host.assignedUsers.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {host.assignedUsers.map((u) => (
+                      <span
+                        key={u}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border"
+                      >
+                        @{u}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground/50 italic">Kein User zugewiesen</p>
+                )}
+              </CardContent>
             </Card>
           ))}
         </div>
