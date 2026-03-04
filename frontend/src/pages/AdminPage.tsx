@@ -14,6 +14,7 @@ import {
   useCreateGlobalHost,
   useDeleteGlobalHost,
   useNetworkScan,
+  useUserOverview,
   useAdminRules,
   useAuditLog,
   usePfSenseStatus,
@@ -54,7 +55,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, Activity } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, Activity, Clock } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1088,6 +1089,160 @@ function UserHostsSection({ user }: { user: AdminUser }) {
   )
 }
 
+// ─── User Overview Dialog ───────────────────────────────────────────────────────
+
+function UserOverviewDialog({ username, userId, open, onOpenChange }: {
+  username: string
+  userId: number
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const { data, isLoading } = useUserOverview(open ? userId : null)
+
+  const statusStyle: Record<string, string> = {
+    ACTIVE:  'bg-green-500/15 text-green-400 border-green-500/30',
+    PENDING: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    DELETED: 'bg-muted text-muted-foreground border-border line-through',
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[560px] border-destructive/25 border-t-destructive/50 border-t-2 max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="font-mono text-primary">@{username}</span>
+            {data && (
+              <Badge variant={data.role === 'ADMIN' ? 'default' : 'secondary'} className="font-mono text-xs">
+                {data.role}
+              </Badge>
+            )}
+            {data && !data.enabled && (
+              <span className="text-xs text-destructive font-normal">(gesperrt)</span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-3 py-4">
+            {[1,2,3].map(i => <div key={i} className="h-4 bg-muted rounded animate-pulse" />)}
+          </div>
+        ) : data ? (
+          <div className="space-y-5 py-1">
+
+            {/* ── Stats ── */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Hosts',    value: data.hostCount,        color: 'text-foreground' },
+                { label: 'Aktiv',    value: data.activeRuleCount,  color: 'text-green-400' },
+                { label: 'Pending',  value: data.pendingRuleCount, color: 'text-yellow-400' },
+                { label: 'Gelöscht', value: data.deletedRuleCount, color: 'text-muted-foreground' },
+              ].map(s => (
+                <div key={s.label} className="rounded-lg border bg-muted/30 px-3 py-2.5 text-center">
+                  <div className={cn('text-2xl font-mono font-bold', s.color)}>{s.value}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Assigned Hosts ── */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Server className="h-3.5 w-3.5" /> Zugewiesene Hosts
+              </p>
+              {data.hosts.length === 0 ? (
+                <p className="text-xs text-muted-foreground/60 italic px-1">Keine Hosts zugewiesen</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.hosts.map(host => (
+                    <div key={host.id} className="flex items-center justify-between rounded-lg border bg-card px-3 py-2">
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium">{host.name}</span>
+                        <span className="font-mono text-xs text-primary ml-2">{host.ipAddress}</span>
+                        {host.description && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{host.description}</p>
+                        )}
+                      </div>
+                      {host.policy && (
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <div className="text-right">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground justify-end">
+                              <Activity className="h-3 w-3" />
+                              <span className="font-mono font-medium text-foreground">{host.activeRuleCount}</span>
+                              <span>aktiv</span>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              {host.policy.portRangeMin}–{host.policy.portRangeMax}
+                            </div>
+                          </div>
+                          <div className="flex gap-0.5">
+                            {host.policy.allowedProtocols.split(',').map(p => (
+                              <span key={p} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted border border-border text-muted-foreground">
+                                {p.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Recent Rules ── */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Letzte NAT-Regeln
+              </p>
+              {data.recentRules.length === 0 ? (
+                <p className="text-xs text-muted-foreground/60 italic px-1">Noch keine Regeln erstellt</p>
+              ) : (
+                <div className="rounded-lg border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="py-2">Host</TableHead>
+                        <TableHead className="py-2">Port</TableHead>
+                        <TableHead className="py-2">Beschreibung</TableHead>
+                        <TableHead className="py-2">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.recentRules.map(rule => (
+                        <TableRow key={rule.id}>
+                          <TableCell className="py-2 font-mono text-xs text-muted-foreground">{rule.hostName}</TableCell>
+                          <TableCell className="py-2 font-mono text-xs">
+                            {rule.protocol}:{rule.port}
+                          </TableCell>
+                          <TableCell className="py-2 text-xs text-muted-foreground max-w-[120px] truncate">
+                            {rule.description ?? <span className="italic">—</span>}
+                          </TableCell>
+                          <TableCell className="py-2">
+                            <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border', statusStyle[rule.status])}>
+                              {rule.status}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Schließen</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Hosts Tab ─────────────────────────────────────────────────────────────────
 
 function HostsTab() {
@@ -1103,6 +1258,7 @@ function HostsTab() {
   const [subnet, setSubnet] = useState('')
   const [scanResults, setScanResults] = useState<ScannedHost[] | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [overviewUser, setOverviewUser] = useState<{ id: number; username: string } | null>(null)
 
   function openCreateWithPrefill(name: string, ip: string) {
     setPrefillName(name)
@@ -1247,12 +1403,13 @@ function HostsTab() {
                 {host.assignedUsers.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {host.assignedUsers.map((u) => (
-                      <span
-                        key={u}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border"
+                      <button
+                        key={u.id}
+                        onClick={() => setOverviewUser({ id: u.id, username: u.username })}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border hover:border-primary/50 hover:text-primary transition-colors cursor-pointer"
                       >
-                        @{u}
-                      </span>
+                        @{u.username}
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -1375,6 +1532,15 @@ function HostsTab() {
         initialName={prefillName}
         initialIp={prefillIp}
       />
+
+      {overviewUser && (
+        <UserOverviewDialog
+          userId={overviewUser.id}
+          username={overviewUser.username}
+          open={!!overviewUser}
+          onOpenChange={(v) => { if (!v) setOverviewUser(null) }}
+        />
+      )}
     </div>
   )
 }

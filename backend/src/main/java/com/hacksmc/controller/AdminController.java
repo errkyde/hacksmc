@@ -98,6 +98,11 @@ public class AdminController {
         return adminService.updatePolicy(userId, hostId, req);
     }
 
+    @GetMapping("/users/{id}/overview")
+    public UserOverviewResponse getUserOverview(@PathVariable Long id) {
+        return adminService.getUserOverview(id);
+    }
+
     // ── NAT Rules ──────────────────────────────────────────────────────────────
 
     @GetMapping("/rules")

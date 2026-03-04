@@ -10,5 +10,5 @@ public record HostDto(
         PolicyDto policy,
         int userCount,
         int activeRuleCount,
-        List<String> assignedUsers
+        List<AssignedUserRef> assignedUsers
 ) {}

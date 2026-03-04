@@ -17,6 +17,11 @@ export interface PolicyDto {
   maxRules: number
 }
 
+export interface AssignedUserRef {
+  id: number
+  username: string
+}
+
 export interface HostDto {
   id: number
   name: string
@@ -25,7 +30,7 @@ export interface HostDto {
   policy: PolicyDto | null
   userCount: number
   activeRuleCount: number
-  assignedUsers: string[]
+  assignedUsers: AssignedUserRef[]
 }
 
 export interface CreateUserInput {
@@ -203,6 +208,29 @@ export function useAuditLog() {
     queryKey: ['admin', 'audit-log'],
     queryFn: () => api.get('/api/admin/audit-log').then((r) => r.data),
     refetchInterval: 30_000,
+  })
+}
+
+// ── User Overview ──────────────────────────────────────────────────────────────
+
+export interface UserOverview {
+  id: number
+  username: string
+  role: 'USER' | 'ADMIN'
+  enabled: boolean
+  hostCount: number
+  activeRuleCount: number
+  pendingRuleCount: number
+  deletedRuleCount: number
+  hosts: HostDto[]
+  recentRules: AdminNatRule[]
+}
+
+export function useUserOverview(userId: number | null) {
+  return useQuery<UserOverview>({
+    queryKey: ['admin', 'users', userId, 'overview'],
+    queryFn: () => api.get(`/api/admin/users/${userId}/overview`).then((r) => r.data),
+    enabled: userId !== null,
   })
 }
 

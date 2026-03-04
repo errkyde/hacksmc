@@ -200,6 +200,56 @@ public class AdminService {
         return toPolicyDto(policy);
     }
 
+    // ── User Overview ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public UserOverviewResponse getUserOverview(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        List<HostDto> hosts = policyRepository.findByUserIdWithHost(userId).stream()
+                .map(p -> toHostDto(p.getHost(), p))
+                .toList();
+
+        List<AdminNatRuleResponse> allRules = natRuleRepository.findByUserIdWithHost(userId).stream()
+                .map(r -> new AdminNatRuleResponse(
+                        r.getId(),
+                        user.getUsername(),
+                        r.getHost().getName(),
+                        r.getHost().getIpAddress(),
+                        r.getProtocol(),
+                        r.getPort(),
+                        r.getDescription(),
+                        r.getPfSenseRuleId(),
+                        r.getStatus().name(),
+                        r.getCreatedAt(),
+                        r.getDeletedAt()
+                ))
+                .toList();
+
+        long active  = allRules.stream().filter(r -> "ACTIVE".equals(r.status())).count();
+        long pending = allRules.stream().filter(r -> "PENDING".equals(r.status())).count();
+        long deleted = allRules.stream().filter(r -> "DELETED".equals(r.status())).count();
+
+        List<AdminNatRuleResponse> recentRules = allRules.stream()
+                .sorted((a, b) -> b.createdAt().compareTo(a.createdAt()))
+                .limit(10)
+                .toList();
+
+        return new UserOverviewResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole(),
+                user.isEnabled(),
+                hosts.size(),
+                (int) active,
+                (int) pending,
+                (int) deleted,
+                hosts,
+                recentRules
+        );
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private String currentAdmin() {
@@ -218,15 +268,15 @@ public class AdminService {
                 host.getIpAddress(),
                 host.getDescription(),
                 policy != null ? toPolicyDto(policy) : null,
-                0, 0, List.of()
+                0, 0, List.<AssignedUserRef>of()
         );
     }
 
     private HostDto toHostDtoWithStats(Host host, Policy policy) {
         int userCount = (int) policyRepository.countByHostId(host.getId());
         int activeRuleCount = (int) natRuleRepository.countByHostIdAndStatus(host.getId(), NatRuleStatus.ACTIVE);
-        List<String> assignedUsers = policyRepository.findByHostIdWithUser(host.getId()).stream()
-                .map(p -> p.getUser().getUsername())
+        List<AssignedUserRef> assignedUsers = policyRepository.findByHostIdWithUser(host.getId()).stream()
+                .map(p -> new AssignedUserRef(p.getUser().getId(), p.getUser().getUsername()))
                 .toList();
         return new HostDto(
                 host.getId(),
