@@ -123,8 +123,13 @@ public class AdminController {
     // ── Audit Log ──────────────────────────────────────────────────────────────
 
     @GetMapping("/audit-log")
-    public List<AuditLogEntry> getAuditLog() {
-        return adminService.getAuditLog();
+    public AuditLogPage getAuditLog(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String actor,
+            @RequestParam(required = false) String action) {
+        size = List.of(10, 25, 50).contains(size) ? size : 25;
+        return adminService.getAuditLogPage(page, size, actor, action);
     }
 
     // ── pfSense Status ─────────────────────────────────────────────────────────

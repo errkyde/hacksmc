@@ -115,6 +115,11 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
+    public AuditLogPage getAuditLogPage(int page, int size, String actor, String action) {
+        return auditLogService.getPage(page, size, actor, action);
+    }
+
+    @Transactional(readOnly = true)
     public PfSenseStatusResponse getPfSenseStatus() {
         return pfSenseApiClient.checkHealth();
     }

@@ -292,15 +292,71 @@ const ACTION_STYLES: Record<string, string> = {
 }
 
 function AuditLogTab() {
-  const { data: entries = [], isLoading } = useAuditLog()
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(25)
+  const [actorFilter, setActorFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
+
+  const { data, isLoading } = useAuditLog({ page, size: pageSize, actor: actorFilter || undefined, action: actionFilter || undefined })
+  const entries: AuditLogEntry[] = data?.content ?? []
+  const totalPages = data?.totalPages ?? 0
+  const totalElements = data?.totalElements ?? 0
+  const availableActors: string[] = data?.availableActors ?? []
+  const availableActions: string[] = data?.availableActions ?? []
+
+  function handleActorChange(v: string) {
+    setActorFilter(v)
+    setPage(0)
+  }
+  function handleActionChange(v: string) {
+    setActionFilter(v)
+    setPage(0)
+  }
+  function handlePageSizeChange(v: string) {
+    setPageSize(Number(v))
+    setPage(0)
+  }
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold tracking-tight">Audit-Log</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {isLoading ? '…' : `${entries.length} Einträge`} · wird alle 30 s aktualisiert
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Audit-Log</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isLoading ? '…' : `${totalElements} Einträge`} · wird alle 30 s aktualisiert
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={actorFilter}
+            onChange={(e) => handleActorChange(e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="">Alle Benutzer</option>
+            {availableActors.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+          <select
+            value={actionFilter}
+            onChange={(e) => handleActionChange(e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="">Alle Aktionen</option>
+            {availableActions.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+          <select
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value={10}>10 / Seite</option>
+            <option value={25}>25 / Seite</option>
+            <option value={50}>50 / Seite</option>
+          </select>
+        </div>
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden">
@@ -343,6 +399,30 @@ function AuditLogTab() {
           </Table>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Seite {page + 1} von {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="h-8 px-3 rounded-md border bg-card hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
+            >
+              ← Zurück
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="h-8 px-3 rounded-md border bg-card hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
+            >
+              Weiter →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

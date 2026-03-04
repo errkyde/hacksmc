@@ -219,11 +219,22 @@ export interface AuditLogEntry {
   detail: string | null
 }
 
-export function useAuditLog() {
-  return useQuery<AuditLogEntry[]>({
-    queryKey: ['admin', 'audit-log'],
-    queryFn: () => api.get('/api/admin/audit-log').then((r) => r.data),
+export interface AuditLogPage {
+  content: AuditLogEntry[]
+  totalElements: number
+  totalPages: number
+  page: number
+  size: number
+  availableActors: string[]
+  availableActions: string[]
+}
+
+export function useAuditLog(params: { page: number; size: number; actor?: string; action?: string }) {
+  return useQuery<AuditLogPage>({
+    queryKey: ['admin', 'audit-log', params],
+    queryFn: () => api.get('/api/admin/audit-log', { params }).then((r) => r.data),
     refetchInterval: 30_000,
+    placeholderData: (prev) => prev,
   })
 }
 
