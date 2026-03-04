@@ -83,7 +83,7 @@ public class PfSenseApiClient {
 
         try {
             restClient.post()
-                    .uri("/api/v2/firewall/nat/port_forward?apply=true")
+                    .uri("/api/v2/firewall/nat/port_forward")
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
@@ -91,6 +91,8 @@ public class PfSenseApiClient {
             log.error("pfSense createNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
+
+        applyChanges();
 
         // pfSenseRuleId = our own DB rule ID (used as the stable identifier via description tag)
         return String.valueOf(dbRuleId);
@@ -106,13 +108,15 @@ public class PfSenseApiClient {
         log.info("Resolved hsmc-id {} to array index {}", pfSenseRuleId, arrayId);
         try {
             restClient.delete()
-                    .uri("/api/v2/firewall/nat/port_forward?id=" + arrayId + "&apply=true")
+                    .uri("/api/v2/firewall/nat/port_forward?id=" + arrayId)
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
             log.error("pfSense deleteNatRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
+
+        applyChanges();
     }
 
     /**
@@ -168,6 +172,19 @@ public class PfSenseApiClient {
         int end = descr.indexOf(TAG_SUFFIX, start + TAG_PREFIX.length());
         if (end == -1) return null;
         return descr.substring(start + TAG_PREFIX.length(), end);
+    }
+
+    private void applyChanges() {
+        try {
+            restClient.post()
+                    .uri("/api/v2/firewall/apply")
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("pfSense firewall changes applied");
+        } catch (Exception e) {
+            log.warn("pfSense apply failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
     }
 
     private static String humanReadable(Exception e) {
