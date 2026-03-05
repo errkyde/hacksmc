@@ -45,16 +45,16 @@ public class PfSenseApiClient {
 
         this.baseUrl = baseUrl;
 
-        RestClient.Builder builder = RestClient.builder()
+        JdkClientHttpRequestFactory requestFactory = trustAllCerts
+                ? trustAllCertsRequestFactory()
+                : new JdkClientHttpRequestFactory(HttpClient.newBuilder().build());
+
+        this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
                 .defaultHeader("X-API-Key", apiKey)
-                .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE);
-
-        if (trustAllCerts) {
-            builder.requestFactory(trustAllCertsRequestFactory());
-        }
-
-        this.restClient = builder.build();
+                .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .build();
     }
 
     /**
