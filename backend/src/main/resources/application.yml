@@ -30,6 +30,8 @@ hacksmc:
     trust-all-certs: ${PFSENSE_TRUST_ALL_CERTS:false}
 
 management:
+  server:
+    port: 9000
   endpoints:
     web:
       exposure:
