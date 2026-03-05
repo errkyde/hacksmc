@@ -286,6 +286,28 @@ export function useNetworkScan() {
   })
 }
 
+// ── Error Log ──────────────────────────────────────────────────────────────
+
+export interface ErrorLogEntry {
+  id: number
+  ts: string
+  actor: string | null
+  method: string | null
+  path: string | null
+  httpStatus: number
+  errorType: string | null
+  message: string | null
+}
+
+export function useAdminErrors() {
+  return useQuery<ErrorLogEntry[]>({
+    queryKey: ['admin', 'errors'],
+    queryFn: () => api.get('/api/admin/errors').then((r) => r.data),
+    refetchInterval: 60_000,
+    staleTime: 60_000,
+  })
+}
+
 // ── pfSense Status ─────────────────────────────────────────────────────────────
 
 export interface PfSenseStatus {

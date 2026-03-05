@@ -20,11 +20,13 @@ import {
   useAdminRules,
   useAuditLog,
   usePfSenseStatus,
+  useAdminErrors,
   type AdminUser,
   type HostDto,
   type ScannedHost,
   type AdminNatRule,
   type AuditLogEntry,
+  type ErrorLogEntry,
 } from '@/hooks/useAdmin'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -57,7 +59,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, Activity, Clock } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, AlertTriangle, Activity, Clock } from 'lucide-react'
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -1933,13 +1935,77 @@ function UsersTab() {
 
 // ─── pfSense Tab ───────────────────────────────────────────────────────────────
 
+function HttpStatusBadge({ status }: { status: number }) {
+  const is5xx = status >= 500
+  const is4xx = status >= 400 && status < 500
+  return (
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border',
+      is5xx ? 'bg-red-500/15 text-red-400 border-red-500/30'
+        : is4xx ? 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+        : 'bg-muted text-muted-foreground border-border'
+    )}>
+      {status}
+    </span>
+  )
+}
+
+function ErrorDetailDialog({ entry, open, onOpenChange }: {
+  entry: ErrorLogEntry | null
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  if (!entry) return null
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-base">Fehlerdetail</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-[100px_1fr] gap-y-2 gap-x-3 items-start">
+            <span className="text-muted-foreground text-xs uppercase tracking-wider pt-0.5">Zeitpunkt</span>
+            <span className="font-mono">{new Date(entry.ts).toLocaleString('de-DE')}</span>
+
+            <span className="text-muted-foreground text-xs uppercase tracking-wider pt-0.5">Actor</span>
+            <span className="font-mono">{entry.actor ?? <span className="italic text-muted-foreground">anonym</span>}</span>
+
+            <span className="text-muted-foreground text-xs uppercase tracking-wider pt-0.5">Request</span>
+            <span className="font-mono break-all">{entry.method} {entry.path}</span>
+
+            <span className="text-muted-foreground text-xs uppercase tracking-wider pt-0.5">Status</span>
+            <span><HttpStatusBadge status={entry.httpStatus} /></span>
+
+            <span className="text-muted-foreground text-xs uppercase tracking-wider pt-0.5">Typ</span>
+            <span className="font-mono text-muted-foreground">{entry.errorType ?? '—'}</span>
+          </div>
+          {entry.message && (
+            <div className="rounded-lg border border-border bg-muted/40 p-3">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5">Nachricht</p>
+              <p className="font-mono text-sm break-all whitespace-pre-wrap">{entry.message}</p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" size="sm">Schließen</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function PfSenseTab() {
   const { data, isLoading, isFetching, dataUpdatedAt, refetch } = usePfSenseStatus()
+  const { data: errors = [], isLoading: errorsLoading } = useAdminErrors()
   const { cooling: pfCooling, trigger: pfTrigger } = useCooldown(5000)
   const up = data?.status === 'UP'
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleString('de-DE')
     : null
+
+  const [selectedError, setSelectedError] = useState<ErrorLogEntry | null>(null)
 
   return (
     <div>
@@ -2007,11 +2073,72 @@ function PfSenseTab() {
       </div>
 
       {!isLoading && !up && data?.error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 mb-8">
           <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1.5">Fehlerdetail</p>
           <p className="text-sm font-mono text-red-300/80 break-all">{data.error}</p>
         </div>
       )}
+
+      {/* ── Letzte Fehler ─────────────────────────────────────────── */}
+      <div className="mt-8">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-base font-semibold tracking-tight">Letzte Fehler</h3>
+          {errors.length > 0 && (
+            <span className="ml-1 text-xs text-muted-foreground font-mono">({errors.length})</span>
+          )}
+        </div>
+
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {errorsLoading ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">Lädt…</div>
+          ) : errors.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-muted-foreground">Keine Fehler aufgezeichnet</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Zeit</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Pfad</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {errors.map((err) => (
+                  <TableRow
+                    key={err.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setSelectedError(err)}
+                  >
+                    <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(err.ts).toLocaleString('de-DE')}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {err.actor ?? <span className="italic text-muted-foreground text-xs">anonym</span>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs max-w-[200px] truncate">
+                      <span className="text-muted-foreground mr-1">{err.method}</span>
+                      {err.path}
+                    </TableCell>
+                    <TableCell>
+                      <HttpStatusBadge status={err.httpStatus} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </div>
+
+      <ErrorDetailDialog
+        entry={selectedError}
+        open={selectedError !== null}
+        onOpenChange={(v) => { if (!v) setSelectedError(null) }}
+      />
     </div>
   )
 }

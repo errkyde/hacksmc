@@ -1,6 +1,8 @@
 package com.hacksmc.controller;
 
 import com.hacksmc.dto.*;
+import com.hacksmc.entity.ErrorLog;
+import com.hacksmc.repository.ErrorLogRepository;
 import com.hacksmc.service.AdminService;
 import com.hacksmc.service.HostPingService;
 import com.hacksmc.service.NetworkScanService;
@@ -23,6 +25,7 @@ public class AdminController {
     private final NetworkScanService networkScanService;
     private final HostPingService hostPingService;
     private final com.hacksmc.repository.HostRepository hostRepository;
+    private final ErrorLogRepository errorLogRepository;
 
     // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -130,6 +133,17 @@ public class AdminController {
             @RequestParam(required = false) String action) {
         size = List.of(10, 25, 50).contains(size) ? size : 25;
         return adminService.getAuditLogPage(page, size, actor, action);
+    }
+
+    // ── Error Log ──────────────────────────────────────────────────────────────
+
+    @GetMapping("/errors")
+    public List<ErrorLogEntry> getErrors() {
+        return errorLogRepository.findTop50ByOrderByTsDesc().stream()
+                .map(e -> new ErrorLogEntry(e.getId(), e.getTs(), e.getActor(),
+                        e.getMethod(), e.getPath(), e.getHttpStatus(),
+                        e.getErrorType(), e.getMessage()))
+                .toList();
     }
 
     // ── pfSense Status ─────────────────────────────────────────────────────────
