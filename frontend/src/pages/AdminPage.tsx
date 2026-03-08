@@ -2141,7 +2141,7 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-8">
-        <span className="text-[10px] font-mono text-muted-foreground/40 select-all">
+        <span className="text-[11px] font-mono text-muted-foreground select-all">
           build {__GIT_COMMIT__}
         </span>
       </div>
