@@ -12,6 +12,10 @@ import org.springframework.web.client.RestClient;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
@@ -202,7 +206,7 @@ public class PfSenseApiClient {
         return msg;
     }
 
-    /** Quick connectivity check against pfSense. Returns UP/DOWN with latency. */
+    /** Quick connectivity check against pfSense via TCP connect. Returns UP/DOWN with latency. */
     public PfSenseStatusResponse checkHealth() {
         if (baseUrl == null || baseUrl.isBlank()) {
             return new PfSenseStatusResponse("DOWN", null, baseUrl,
@@ -212,14 +216,17 @@ public class PfSenseApiClient {
             return new PfSenseStatusResponse("DOWN", null, baseUrl,
                     "PFSENSE_BASE_URL muss mit https:// beginnen (aktuell: \"" + baseUrl + "\")");
         }
-        long start = System.currentTimeMillis();
         try {
-            restClient.get()
-                    .uri("/api/v2/status/system")
-                    .retrieve()
-                    .toBodilessEntity();
+            URI uri = URI.create(baseUrl);
+            String host = uri.getHost();
+            int port = uri.getPort() != -1 ? uri.getPort()
+                    : baseUrl.startsWith("https://") ? 443 : 80;
+            long start = System.currentTimeMillis();
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(host, port), 3000);
+            }
             return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start, baseUrl, null);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.warn("pfSense health check failed: {}", e.getMessage());
             return new PfSenseStatusResponse("DOWN", null, baseUrl, e.getMessage());
         }
