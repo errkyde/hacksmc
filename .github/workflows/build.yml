@@ -49,5 +49,6 @@ jobs:
           file: Dockerfile.frontend
           push: true
           tags: ${{ env.FRONTEND_IMAGE }}:latest
+          build-args: GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

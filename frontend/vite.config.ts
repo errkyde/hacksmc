@@ -6,10 +6,12 @@ import { execSync } from 'node:child_process'
 const PORT_BACKEND = Number(process.env.PORT_BACKEND ?? 3000)
 const PORT_VITE_DEV = Number(process.env.PORT_VITE_DEV ?? 5173)
 
-let GIT_COMMIT = 'unknown'
-try {
-  GIT_COMMIT = execSync('git rev-parse --short HEAD').toString().trim()
-} catch { /* ignore */ }
+let GIT_COMMIT = (process.env.GIT_COMMIT ?? '').slice(0, 7)
+if (!GIT_COMMIT) {
+  try {
+    GIT_COMMIT = execSync('git rev-parse --short HEAD').toString().trim()
+  } catch { GIT_COMMIT = 'unknown' }
+}
 
 export default defineConfig({
   define: {
