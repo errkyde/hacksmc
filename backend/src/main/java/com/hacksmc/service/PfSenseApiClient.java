@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.time.Instant;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.List;
@@ -41,6 +42,9 @@ public class PfSenseApiClient {
 
     private final RestClient restClient;
     private final String baseUrl;
+
+    private volatile PfSenseStatusResponse cachedStatus;
+    private volatile Instant cacheExpiry = Instant.MIN;
 
     public PfSenseApiClient(
             @Value("${hacksmc.pfsense.base-url}") String baseUrl,
@@ -206,8 +210,17 @@ public class PfSenseApiClient {
         return msg;
     }
 
-    /** Quick connectivity check against pfSense via TCP connect. Returns UP/DOWN with latency. */
+    /** Quick connectivity check against pfSense via TCP connect. Result cached for 5 minutes. */
     public PfSenseStatusResponse checkHealth() {
+        if (Instant.now().isBefore(cacheExpiry) && cachedStatus != null) {
+            return cachedStatus;
+        }
+        cachedStatus = doCheckHealth();
+        cacheExpiry = Instant.now().plusSeconds(300);
+        return cachedStatus;
+    }
+
+    private PfSenseStatusResponse doCheckHealth() {
         if (baseUrl == null || baseUrl.isBlank()) {
             return new PfSenseStatusResponse("DOWN", null, baseUrl,
                     "PFSENSE_BASE_URL ist nicht konfiguriert");
