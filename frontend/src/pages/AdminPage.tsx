@@ -2139,6 +2139,12 @@ function PfSenseTab() {
         open={selectedError !== null}
         onOpenChange={(v) => { if (!v) setSelectedError(null) }}
       />
+
+      <div className="flex justify-end mt-8">
+        <span className="text-[10px] font-mono text-muted-foreground/40 select-all">
+          build {__GIT_COMMIT__}
+        </span>
+      </div>
     </div>
   )
 }
