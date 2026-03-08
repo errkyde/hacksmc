@@ -2015,7 +2015,6 @@ function PfSenseTab() {
           <p className="text-sm text-muted-foreground mt-0.5">
             {lastUpdated ? `Zuletzt geprüft: ${lastUpdated}` : 'Wird geprüft…'} · automatisch alle 60 s
           </p>
-          <p className="text-[11px] font-mono text-muted-foreground mt-1 select-all">build: {__GIT_COMMIT__}</p>
         </div>
         <Button
           variant="outline"
@@ -2141,6 +2140,9 @@ function PfSenseTab() {
         onOpenChange={(v) => { if (!v) setSelectedError(null) }}
       />
 
+      <div className="flex justify-end mt-6">
+        <span className="text-[11px] font-mono text-muted-foreground">v1.0.0</span>
+      </div>
     </div>
   )
 }
