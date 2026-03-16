@@ -359,6 +359,13 @@ export interface SystemSettingsDto {
   discordNotifyExpire: boolean
   updatedBy: string | null
   updatedAt: string | null
+  // SMTP
+  mailHost: string | null
+  mailPort: number
+  mailUsername: string | null
+  mailPasswordSet: boolean
+  mailTlsEnabled: boolean
+  mailFrom: string | null
 }
 
 export function useSystemSettings() {
@@ -368,12 +375,35 @@ export function useSystemSettings() {
   })
 }
 
+export interface UpdateSystemSettingsInput {
+  pfSenseMaintenance?: boolean
+  siteMaintenance?: boolean
+  discordWebhookUrl?: string | null
+  discordEnabled?: boolean
+  discordNotifyCreate?: boolean
+  discordNotifyDelete?: boolean
+  discordNotifyExpire?: boolean
+  mailHost?: string | null
+  mailPort?: number
+  mailUsername?: string | null
+  mailPassword?: string
+  mailTlsEnabled?: boolean
+  mailFrom?: string | null
+}
+
 export function useUpdateSystemSettings() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: Partial<SystemSettingsDto>) =>
+    mutationFn: (data: UpdateSystemSettingsInput) =>
       api.put<SystemSettingsDto>('/api/admin/settings', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'settings'] }),
+  })
+}
+
+export function useSendTestMail() {
+  return useMutation({
+    mutationFn: (to: string) =>
+      api.post<{ status: string; message: string }>('/api/admin/settings/test-mail', { to }).then((r) => r.data),
   })
 }
 

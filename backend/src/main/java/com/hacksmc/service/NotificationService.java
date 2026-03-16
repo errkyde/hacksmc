@@ -7,9 +7,8 @@ import com.hacksmc.entity.SystemSettings;
 import com.hacksmc.repository.EmailNotificationProfileRepository;
 import com.hacksmc.repository.NotificationSettingsRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -24,17 +23,14 @@ public class NotificationService {
     private final NotificationSettingsRepository notifRepo;
     private final EmailNotificationProfileRepository emailProfileRepo;
     private final MaintenanceService maintenanceService;
-    private final JavaMailSender mailSender;
     private final RestClient restClient;
 
     public NotificationService(NotificationSettingsRepository notifRepo,
                                 EmailNotificationProfileRepository emailProfileRepo,
-                                MaintenanceService maintenanceService,
-                                @Autowired(required = false) JavaMailSender mailSender) {
+                                MaintenanceService maintenanceService) {
         this.notifRepo = notifRepo;
         this.emailProfileRepo = emailProfileRepo;
         this.maintenanceService = maintenanceService;
-        this.mailSender = mailSender;
         this.restClient = RestClient.create();
     }
 
@@ -53,22 +49,22 @@ public class NotificationService {
             String subject = "[HackSMC] Regel " + action.toLowerCase() + ": " + hostName + " " + rule.getProtocol() + ":" + portStr;
             String body = buildEmailBody(action, rule, hostName, portStr, actorUsername);
 
-            // Email notifications (legacy per-user settings)
+            // Email notifications
+            JavaMailSenderImpl mailSender = maintenanceService.buildMailSender(settings);
             if (mailSender != null) {
+                String fromAddr = settings.getMailFrom() != null ? settings.getMailFrom() : settings.getMailUsername();
+                // Legacy per-user settings
                 List<NotificationSettings> eligible = notifRepo.findAllWithEmailEnabled();
                 for (NotificationSettings ns : eligible) {
                     if (!shouldNotify(ns, action, hostId, actorUsername)) continue;
-                    sendEmail(ns.getEmail(), subject, body);
+                    sendEmail(mailSender, fromAddr, ns.getEmail(), subject, body);
                 }
-            }
-
-            // Email notification profiles
-            if (mailSender != null) {
+                // Email notification profiles
                 Long actorUserId = rule.getUser().getId();
                 List<EmailNotificationProfile> profiles = emailProfileRepo.findAllByOrderByCreatedAtAsc();
                 for (EmailNotificationProfile p : profiles) {
                     if (!shouldNotifyProfile(p, action, actorUserId)) continue;
-                    sendEmail(p.getEmail(), subject, body);
+                    sendEmail(mailSender, fromAddr, p.getEmail(), subject, body);
                 }
             }
 
@@ -104,13 +100,14 @@ public class NotificationService {
         return true;
     }
 
-    private void sendEmail(String to, String subject, String body) {
+    private void sendEmail(JavaMailSenderImpl sender, String from, String to, String subject, String body) {
         try {
             SimpleMailMessage msg = new SimpleMailMessage();
+            if (from != null && !from.isBlank()) msg.setFrom(from);
             msg.setTo(to);
             msg.setSubject(subject);
             msg.setText(body);
-            mailSender.send(msg);
+            sender.send(msg);
             log.info("Email sent to {}: {}", to, subject);
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());

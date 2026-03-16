@@ -7,5 +7,12 @@ public record UpdateSystemSettingsRequest(
     boolean discordEnabled,
     boolean discordNotifyCreate,
     boolean discordNotifyDelete,
-    boolean discordNotifyExpire
+    boolean discordNotifyExpire,
+    // SMTP — null means "leave existing password unchanged"
+    String mailHost,
+    Integer mailPort,
+    String mailUsername,
+    String mailPassword,
+    Boolean mailTlsEnabled,
+    String mailFrom
 ) {}

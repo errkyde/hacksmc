@@ -33,6 +33,7 @@ import {
   useCreateEmailNotificationProfile,
   useUpdateEmailNotificationProfile,
   useDeleteEmailNotificationProfile,
+  useSendTestMail,
   type EmailNotificationProfileDto,
   type SaveEmailNotificationProfileRequest,
   type AdminUser,
@@ -41,7 +42,6 @@ import {
   type AdminNatRule,
   type AuditLogEntry,
   type ErrorLogEntry,
-  type SystemSettingsDto,
 } from '@/hooks/useAdmin'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -74,7 +74,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, AlertTriangle, Activity, Clock, Settings, Shield, Bell, Calendar } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, AlertTriangle, Activity, Clock, Settings, Shield, Bell, Calendar, Mail, Send } from 'lucide-react'
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -2341,7 +2341,7 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.3.2</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.4.0</span>
       </div>
     </div>
   )
@@ -2650,6 +2650,7 @@ function EmailProfilesSection() {
 function EinstellungenTab() {
   const { data: settings, isLoading } = useSystemSettings()
   const updateSettings = useUpdateSystemSettings()
+  const sendTestMail = useSendTestMail()
   const { data: blockedRanges = [], isLoading: rangesLoading } = useBlockedPortRanges()
   const createRange = useCreateBlockedRange()
   const deleteRange = useDeleteBlockedRange()
@@ -2663,7 +2664,17 @@ function EinstellungenTab() {
   const [discordNotifyDelete, setDiscordNotifyDelete] = useState(true)
   const [discordNotifyExpire, setDiscordNotifyExpire] = useState(true)
   const [settingsSaved, setSettingsSaved] = useState(false)
-  const [notifTab, setNotifTab] = useState<'discord' | 'email'>('discord')
+  const [notifTab, setNotifTab] = useState<'discord' | 'email' | 'smtp'>('discord')
+
+  // SMTP state
+  const [mailHost, setMailHost] = useState('')
+  const [mailPort, setMailPort] = useState('587')
+  const [mailUsername, setMailUsername] = useState('')
+  const [mailPassword, setMailPassword] = useState('')
+  const [mailTlsEnabled, setMailTlsEnabled] = useState(true)
+  const [mailFrom, setMailFrom] = useState('')
+  const [testMailTo, setTestMailTo] = useState('')
+  const [smtpSaved, setSmtpSaved] = useState(false)
 
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
@@ -2679,6 +2690,12 @@ function EinstellungenTab() {
       setDiscordNotifyCreate(settings.discordNotifyCreate)
       setDiscordNotifyDelete(settings.discordNotifyDelete)
       setDiscordNotifyExpire(settings.discordNotifyExpire)
+      setMailHost(settings.mailHost ?? '')
+      setMailPort(String(settings.mailPort || 587))
+      setMailUsername(settings.mailUsername ?? '')
+      setMailTlsEnabled(settings.mailTlsEnabled ?? true)
+      setMailFrom(settings.mailFrom ?? '')
+      // Never pre-fill password — only set on explicit change
     }
   }, [settings])
 
@@ -2693,12 +2710,50 @@ function EinstellungenTab() {
         discordNotifyCreate,
         discordNotifyDelete,
         discordNotifyExpire,
-      } as SystemSettingsDto)
+      })
       setSettingsSaved(true)
       setTimeout(() => setSettingsSaved(false), 2000)
       toast({ title: 'Einstellungen gespeichert' })
     } catch {
       toast({ title: 'Fehler', description: 'Speichern fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  async function handleSaveSmtp(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await updateSettings.mutateAsync({
+        pfSenseMaintenance: pfMaintenance,
+        siteMaintenance,
+        discordWebhookUrl: discordUrl.trim() || null,
+        discordEnabled,
+        discordNotifyCreate,
+        discordNotifyDelete,
+        discordNotifyExpire,
+        mailHost: mailHost.trim() || null,
+        mailPort: Number(mailPort) || 587,
+        mailUsername: mailUsername.trim() || null,
+        mailPassword: mailPassword || undefined,
+        mailTlsEnabled,
+        mailFrom: mailFrom.trim() || null,
+      })
+      setMailPassword('')
+      setSmtpSaved(true)
+      setTimeout(() => setSmtpSaved(false), 2000)
+      toast({ title: 'SMTP-Einstellungen gespeichert' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Speichern fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  async function handleTestMail(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      const result = await sendTestMail.mutateAsync(testMailTo.trim())
+      toast({ title: 'Test-Mail gesendet', description: result.message })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'SMTP-Fehler'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
     }
   }
 
@@ -2809,31 +2864,26 @@ function EinstellungenTab() {
         </div>
 
         {/* Sub-tabs */}
-        <div className="flex gap-1 border-b">
-          <button
-            type="button"
-            onClick={() => setNotifTab('discord')}
-            className={cn(
-              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-              notifTab === 'discord'
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Discord
-          </button>
-          <button
-            type="button"
-            onClick={() => setNotifTab('email')}
-            className={cn(
-              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-              notifTab === 'email'
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            E-Mail
-          </button>
+        <div className="flex border-b">
+          {([
+            { id: 'discord', label: 'Discord' },
+            { id: 'email',   label: 'E-Mail' },
+            { id: 'smtp',    label: 'SMTP-Server' },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setNotifTab(t.id)}
+              className={cn(
+                'flex-1 py-2 text-sm font-medium border-b-2 -mb-px transition-colors text-center',
+                notifTab === t.id
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {notifTab === 'discord' && (
@@ -2920,6 +2970,136 @@ function EinstellungenTab() {
 
         {notifTab === 'email' && (
           <EmailProfilesSection />
+        )}
+
+        {notifTab === 'smtp' && (
+          <div className="space-y-6">
+            <p className="text-xs text-muted-foreground">
+              SMTP-Zugangsdaten für den E-Mail-Versand. Das Passwort wird verschlüsselt gespeichert und nie zurückgegeben.
+            </p>
+
+            <form onSubmit={handleSaveSmtp} className="space-y-4">
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">SMTP-Host</Label>
+                    <Input
+                      value={mailHost}
+                      onChange={(e) => setMailHost(e.target.value)}
+                      placeholder="smtp.example.com"
+                      className="font-mono text-sm h-8"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Port</Label>
+                    <Input
+                      type="number"
+                      value={mailPort}
+                      onChange={(e) => setMailPort(e.target.value)}
+                      min={1}
+                      max={65535}
+                      className="font-mono text-sm h-8 w-24"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Benutzername</Label>
+                    <Input
+                      value={mailUsername}
+                      onChange={(e) => setMailUsername(e.target.value)}
+                      placeholder="user@example.com"
+                      autoComplete="off"
+                      className="font-mono text-sm h-8"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      Passwort
+                      {settings?.mailPasswordSet && (
+                        <span className="ml-1.5 text-emerald-500 font-mono text-[10px]">● gesetzt</span>
+                      )}
+                    </Label>
+                    <Input
+                      type="password"
+                      value={mailPassword}
+                      onChange={(e) => setMailPassword(e.target.value)}
+                      placeholder={settings?.mailPasswordSet ? '(unverändert)' : 'Passwort eingeben'}
+                      autoComplete="new-password"
+                      className="font-mono text-sm h-8"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Absender-Adresse (From)</Label>
+                  <Input
+                    type="email"
+                    value={mailFrom}
+                    onChange={(e) => setMailFrom(e.target.value)}
+                    placeholder="hacksmc@example.com"
+                    className="font-mono text-sm h-8"
+                  />
+                </div>
+                <Separator />
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mailTlsEnabled}
+                    onChange={(e) => setMailTlsEnabled(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  STARTTLS aktivieren
+                </label>
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <Button type="submit" disabled={updateSettings.isPending}>
+                  {smtpSaved ? (
+                    <><Check className="h-4 w-4 mr-1.5" />Gespeichert</>
+                  ) : updateSettings.isPending ? 'Wird gespeichert…' : (
+                    <><Mail className="h-4 w-4 mr-1.5" />SMTP speichern</>
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            <Separator />
+
+            {/* Test-Mail */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Send className="h-4 w-4 text-muted-foreground" />
+                Test-E-Mail senden
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Sendet eine Test-Mail über die aktuell gespeicherte SMTP-Konfiguration.
+              </p>
+              <form onSubmit={handleTestMail} className="flex gap-2 items-end flex-wrap">
+                <div className="space-y-1.5 flex-1 min-w-[200px]">
+                  <Label className="text-xs text-muted-foreground">Empfänger</Label>
+                  <Input
+                    type="email"
+                    value={testMailTo}
+                    onChange={(e) => setTestMailTo(e.target.value)}
+                    placeholder="test@example.com"
+                    required
+                    className="font-mono text-sm h-8"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  disabled={sendTestMail.isPending || !testMailTo}
+                  className="h-8"
+                >
+                  {sendTestMail.isPending ? 'Sendet…' : (
+                    <><Send className="h-3.5 w-3.5 mr-1" />Senden</>
+                  )}
+                </Button>
+              </form>
+            </div>
+          </div>
         )}
       </section>
 

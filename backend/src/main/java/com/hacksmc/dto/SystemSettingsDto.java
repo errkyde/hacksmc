@@ -10,5 +10,12 @@ public record SystemSettingsDto(
     boolean discordNotifyDelete,
     boolean discordNotifyExpire,
     String updatedBy,
-    Instant updatedAt
+    Instant updatedAt,
+    // SMTP
+    String mailHost,
+    int mailPort,
+    String mailUsername,
+    boolean mailPasswordSet,
+    boolean mailTlsEnabled,
+    String mailFrom
 ) {}

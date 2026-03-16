@@ -204,6 +204,31 @@ public class AdminController {
         return maintenanceService.update(req, principal.getName());
     }
 
+    // ── Test Mail ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/settings/test-mail")
+    public Map<String, String> testMail(@Valid @RequestBody TestMailRequest req) {
+        com.hacksmc.entity.SystemSettings s = maintenanceService.getSettings();
+        org.springframework.mail.javamail.JavaMailSenderImpl sender = maintenanceService.buildMailSender(s);
+        if (sender == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "SMTP not configured (mailHost missing)");
+        }
+        try {
+            org.springframework.mail.SimpleMailMessage msg = new org.springframework.mail.SimpleMailMessage();
+            String from = s.getMailFrom() != null ? s.getMailFrom() : s.getMailUsername();
+            if (from != null && !from.isBlank()) msg.setFrom(from);
+            msg.setTo(req.to());
+            msg.setSubject("[HackSMC] Test-E-Mail");
+            msg.setText("Diese E-Mail bestätigt, dass die SMTP-Konfiguration in HackSMC funktioniert.");
+            sender.send(msg);
+            return Map.of("status", "ok", "message", "Test-Mail an " + req.to() + " gesendet");
+        } catch (Exception e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_GATEWAY, "SMTP-Fehler: " + e.getMessage());
+        }
+    }
+
     // ── Blocked Port Ranges ────────────────────────────────────────────────────
 
     @GetMapping("/blocked-ranges")

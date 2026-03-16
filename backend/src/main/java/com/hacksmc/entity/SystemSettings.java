@@ -20,4 +20,12 @@ public class SystemSettings {
     @Column(nullable = false) private boolean discordNotifyExpire = true;
     @Column private String updatedBy;
     @Column private Instant updatedAt;
+
+    // ── SMTP ──────────────────────────────────────────────────────────────────
+    @Column(name = "mail_host") private String mailHost;
+    @Column(name = "mail_port", nullable = false) private int mailPort = 587;
+    @Column(name = "mail_username") private String mailUsername;
+    @Column(name = "mail_password", length = 500) private String mailPassword;
+    @Column(name = "mail_tls_enabled", nullable = false) private boolean mailTlsEnabled = true;
+    @Column(name = "mail_from") private String mailFrom;
 }
