@@ -11,7 +11,7 @@ import java.time.Instant;
 public class SystemSettings {
     @Id private int id = 1;
     @Column(nullable = false) private boolean siteMaintenance = false;
-    @Column(nullable = false) private boolean pfSenseMaintenance = false;
+    @Column(name = "pfsense_maintenance", nullable = false) private boolean pfSenseMaintenance = false;
     @Column(nullable = false, length = 500) private String siteMaintenanceMessage = "Die Plattform befindet sich im Wartungsmodus.";
     @Column(length = 1000) private String discordWebhookUrl;
     @Column(nullable = false) private boolean discordEnabled = false;
