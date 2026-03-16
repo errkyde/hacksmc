@@ -3,6 +3,7 @@ package com.hacksmc.controller;
 import com.hacksmc.dto.*;
 import com.hacksmc.entity.ErrorLog;
 import com.hacksmc.repository.BlockedPortRangeRepository;
+import com.hacksmc.repository.EmailNotificationProfileRepository;
 import com.hacksmc.repository.ErrorLogRepository;
 import com.hacksmc.repository.NotificationSettingsRepository;
 import com.hacksmc.service.AdminService;
@@ -35,6 +36,7 @@ public class AdminController {
     private final NotificationSettingsRepository notificationSettingsRepository;
     private final BlockedPortRangeRepository blockedPortRangeRepository;
     private final NatRuleService natRuleService;
+    private final EmailNotificationProfileRepository emailNotificationProfileRepository;
 
     // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -278,5 +280,62 @@ public class AdminController {
                 ns.getId(), ns.getUser().getId(), ns.getEmail(), ns.isEmailEnabled(),
                 ns.isNotifyOnCreate(), ns.isNotifyOnDelete(), ns.isNotifyOnExpire(),
                 ns.isNotifyAllHosts(), ns.getNotifyScope(), new java.util.HashSet<>(ns.getHostFilter()));
+    }
+
+    // ── Email Notification Profiles ────────────────────────────────────────────
+
+    @GetMapping("/email-profiles")
+    public List<EmailNotificationProfileDto> getEmailProfiles() {
+        return emailNotificationProfileRepository.findAllByOrderByCreatedAtAsc().stream()
+                .map(this::toEmailProfileDto)
+                .toList();
+    }
+
+    @PostMapping("/email-profiles")
+    @ResponseStatus(HttpStatus.CREATED)
+    public EmailNotificationProfileDto createEmailProfile(
+            @Valid @RequestBody SaveEmailNotificationProfileRequest req) {
+        com.hacksmc.entity.EmailNotificationProfile p = new com.hacksmc.entity.EmailNotificationProfile();
+        applyEmailProfileRequest(p, req);
+        p = emailNotificationProfileRepository.save(p);
+        return toEmailProfileDto(p);
+    }
+
+    @PutMapping("/email-profiles/{id}")
+    public EmailNotificationProfileDto updateEmailProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody SaveEmailNotificationProfileRequest req) {
+        com.hacksmc.entity.EmailNotificationProfile p = emailNotificationProfileRepository.findById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Profile not found"));
+        applyEmailProfileRequest(p, req);
+        p = emailNotificationProfileRepository.save(p);
+        return toEmailProfileDto(p);
+    }
+
+    @DeleteMapping("/email-profiles/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteEmailProfile(@PathVariable Long id) {
+        if (!emailNotificationProfileRepository.existsById(id)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "Profile not found");
+        }
+        emailNotificationProfileRepository.deleteById(id);
+    }
+
+    private void applyEmailProfileRequest(com.hacksmc.entity.EmailNotificationProfile p, SaveEmailNotificationProfileRequest req) {
+        p.setEmail(req.email());
+        p.setNotifyOnCreate(req.notifyOnCreate());
+        p.setNotifyOnDelete(req.notifyOnDelete());
+        p.setNotifyOnExpire(req.notifyOnExpire());
+        p.setScope(req.scope() != null ? req.scope() : "ALL");
+        p.setUserIds(req.userIds() != null ? req.userIds() : java.util.Set.of());
+    }
+
+    private EmailNotificationProfileDto toEmailProfileDto(com.hacksmc.entity.EmailNotificationProfile p) {
+        return new EmailNotificationProfileDto(
+                p.getId(), p.getEmail(),
+                p.isNotifyOnCreate(), p.isNotifyOnDelete(), p.isNotifyOnExpire(),
+                p.getScope(), new java.util.HashSet<>(p.getUserIds()), p.getCreatedAt());
     }
 }

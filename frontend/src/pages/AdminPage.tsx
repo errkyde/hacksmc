@@ -29,8 +29,12 @@ import {
   useBlockedPortRanges,
   useCreateBlockedRange,
   useDeleteBlockedRange,
-  useNotificationSettings,
-  useUpdateNotificationSettings,
+  useEmailNotificationProfiles,
+  useCreateEmailNotificationProfile,
+  useUpdateEmailNotificationProfile,
+  useDeleteEmailNotificationProfile,
+  type EmailNotificationProfileDto,
+  type SaveEmailNotificationProfileRequest,
   type AdminUser,
   type HostDto,
   type ScannedHost,
@@ -1248,119 +1252,6 @@ function EditPolicyDialog({
 
 // ─── User Hosts Section (expanded per user) ────────────────────────────────────
 
-function NotificationSection({ userId }: { userId: number }) {
-  const { data: ns, isLoading } = useNotificationSettings(userId)
-  const updateMutation = useUpdateNotificationSettings(userId)
-  const { toast } = useToast()
-  const [open, setOpen] = useState(false)
-
-  const [email, setEmail] = useState('')
-  const [emailEnabled, setEmailEnabled] = useState(false)
-  const [notifyOnCreate, setNotifyOnCreate] = useState(true)
-  const [notifyOnDelete, setNotifyOnDelete] = useState(true)
-  const [notifyOnExpire, setNotifyOnExpire] = useState(true)
-  const [notifyScope, setNotifyScope] = useState<'OWN' | 'ALL'>('OWN')
-
-  useEffect(() => {
-    if (ns) {
-      setEmail(ns.email ?? '')
-      setEmailEnabled(ns.emailEnabled)
-      setNotifyOnCreate(ns.notifyOnCreate)
-      setNotifyOnDelete(ns.notifyOnDelete)
-      setNotifyOnExpire(ns.notifyOnExpire)
-      setNotifyScope(ns.notifyScope)
-    }
-  }, [ns])
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    try {
-      await updateMutation.mutateAsync({
-        email: email.trim() || null,
-        emailEnabled,
-        notifyOnCreate,
-        notifyOnDelete,
-        notifyOnExpire,
-        notifyAllHosts: ns?.notifyAllHosts ?? true,
-        notifyScope,
-        hostFilter: ns?.hostFilter ?? [],
-      })
-      toast({ title: 'Benachrichtigungen gespeichert' })
-      setOpen(false)
-    } catch {
-      toast({ title: 'Fehler', description: 'Speichern fehlgeschlagen', variant: 'destructive' })
-    }
-  }
-
-  return (
-    <div className="mt-3 pt-3 border-t border-border/50">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <Bell className="h-3 w-3" /> Benachrichtigungen
-        </p>
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setOpen(!open)}>
-          {open ? 'Schließen' : 'Bearbeiten'}
-        </Button>
-      </div>
-      {open && (
-        <form onSubmit={handleSave} className="mt-3 space-y-3">
-          {isLoading ? (
-            <p className="text-xs text-muted-foreground">Lädt…</p>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">E-Mail</p>
-                <div className="flex items-center gap-3">
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="E-Mail-Adresse"
-                    className="h-8 text-xs flex-1"
-                  />
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                    <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} className="accent-primary" />
-                    aktiv
-                  </label>
-                </div>
-                <div className={cn('flex flex-wrap gap-3 text-xs', !emailEnabled && 'opacity-50 pointer-events-none')}>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={notifyOnCreate} onChange={(e) => setNotifyOnCreate(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
-                    Regel erstellt
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={notifyOnDelete} onChange={(e) => setNotifyOnDelete(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
-                    Regel gelöscht
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={notifyOnExpire} onChange={(e) => setNotifyOnExpire(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
-                    Regel abgelaufen
-                  </label>
-                </div>
-                <div className={cn('flex flex-wrap gap-3 text-xs', !emailEnabled && 'opacity-50 pointer-events-none')}>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notifyScope === 'ALL'}
-                      onChange={(e) => setNotifyScope(e.target.checked ? 'ALL' : 'OWN')}
-                      className="accent-primary"
-                      disabled={!emailEnabled}
-                    />
-                    Alle Regeln (nicht nur eigene)
-                  </label>
-                </div>
-              </div>
-              <Button type="submit" size="sm" variant="outline" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? 'Wird gespeichert…' : 'Speichern'}
-              </Button>
-            </>
-          )}
-        </form>
-      )}
-    </div>
-  )
-}
-
 function UserHostsSection({ user }: { user: AdminUser }) {
   const { data: hosts = [], isLoading } = useUserHosts(user.id)
   const unassignHost = useUnassignHost(user.id)
@@ -1491,8 +1382,6 @@ function UserHostsSection({ user }: { user: AdminUser }) {
           </Table>
         </div>
       )}
-
-      <NotificationSection userId={user.id} />
 
       <AssignHostDialog
         userId={user.id}
@@ -2452,8 +2341,306 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.3.1</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.3.2</span>
       </div>
+    </div>
+  )
+}
+
+// ─── Email Profiles Section ────────────────────────────────────────────────────
+
+function EmailProfilesSection() {
+  const { data: profiles = [], isLoading } = useEmailNotificationProfiles()
+  const { data: users = [] } = useAdminUsers()
+  const createMutation = useCreateEmailNotificationProfile()
+  const updateMutation = useUpdateEmailNotificationProfile()
+  const deleteMutation = useDeleteEmailNotificationProfile()
+  const { toast } = useToast()
+
+  const [editingId, setEditingId] = useState<number | 'new' | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+
+  // Form state
+  const [formEmail, setFormEmail] = useState('')
+  const [formCreate, setFormCreate] = useState(true)
+  const [formDelete, setFormDelete] = useState(true)
+  const [formExpire, setFormExpire] = useState(true)
+  const [formScope, setFormScope] = useState<'ALL' | 'SPECIFIC'>('ALL')
+  const [formUserIds, setFormUserIds] = useState<number[]>([])
+
+  function openNew() {
+    setFormEmail('')
+    setFormCreate(true)
+    setFormDelete(true)
+    setFormExpire(true)
+    setFormScope('ALL')
+    setFormUserIds([])
+    setEditingId('new')
+  }
+
+  function openEdit(p: EmailNotificationProfileDto) {
+    setFormEmail(p.email)
+    setFormCreate(p.notifyOnCreate)
+    setFormDelete(p.notifyOnDelete)
+    setFormExpire(p.notifyOnExpire)
+    setFormScope(p.scope)
+    setFormUserIds([...p.userIds])
+    setEditingId(p.id)
+  }
+
+  function toggleUserId(id: number) {
+    setFormUserIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  function buildRequest(): SaveEmailNotificationProfileRequest {
+    return {
+      email: formEmail.trim(),
+      notifyOnCreate: formCreate,
+      notifyOnDelete: formDelete,
+      notifyOnExpire: formExpire,
+      scope: formScope,
+      userIds: formScope === 'ALL' ? [] : formUserIds,
+    }
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      if (editingId === 'new') {
+        await createMutation.mutateAsync(buildRequest())
+        toast({ title: 'Profil erstellt' })
+      } else {
+        await updateMutation.mutateAsync({ id: editingId as number, data: buildRequest() })
+        toast({ title: 'Profil aktualisiert' })
+      }
+      setEditingId(null)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Fehler'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await deleteMutation.mutateAsync(id)
+      setDeleteConfirmId(null)
+      toast({ title: 'Profil gelöscht' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Löschen fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending
+
+  function ProfileForm({ onCancel }: { onCancel: () => void }) {
+    return (
+      <form onSubmit={handleSave} className="rounded-lg border bg-card p-4 space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs">E-Mail-Adresse</Label>
+          <Input
+            type="email"
+            value={formEmail}
+            onChange={e => setFormEmail(e.target.value)}
+            placeholder="empfaenger@example.com"
+            required
+            className="text-sm"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Ereignisse</p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={formCreate} onChange={e => setFormCreate(e.target.checked)} className="accent-primary" />
+              Regel erstellt
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={formDelete} onChange={e => setFormDelete(e.target.checked)} className="accent-primary" />
+              Regel gelöscht
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={formExpire} onChange={e => setFormExpire(e.target.checked)} className="accent-primary" />
+              Regel abgelaufen
+            </label>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Benutzer</p>
+          <div className="flex gap-2 mb-2">
+            <button
+              type="button"
+              onClick={() => setFormScope('ALL')}
+              className={cn(
+                'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
+                formScope === 'ALL'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/50'
+              )}
+            >
+              Alle
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormScope('SPECIFIC')}
+              className={cn(
+                'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
+                formScope === 'SPECIFIC'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/50'
+              )}
+            >
+              Auswahl
+            </button>
+          </div>
+          {formScope === 'SPECIFIC' && (
+            <div className="flex flex-wrap gap-2">
+              {users.map(u => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => toggleUserId(u.id)}
+                  className={cn(
+                    'px-2.5 py-1 rounded text-xs font-mono border transition-colors',
+                    formUserIds.includes(u.id)
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border text-muted-foreground hover:border-primary/50'
+                  )}
+                >
+                  {u.username}
+                </button>
+              ))}
+              {users.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">Keine Benutzer</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={isSaving || !formEmail.trim()}>
+            {isSaving ? 'Wird gespeichert…' : editingId === 'new' ? 'Erstellen' : 'Speichern'}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Abbrechen</Button>
+        </div>
+      </form>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">E-Mail-Benachrichtigungsprofile</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Jedes Profil sendet E-Mails an eine Adresse bei bestimmten Ereignissen.
+          </p>
+        </div>
+        {editingId !== 'new' && (
+          <Button size="sm" variant="outline" onClick={openNew}>
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Neues Profil
+          </Button>
+        )}
+      </div>
+
+      {editingId === 'new' && (
+        <ProfileForm onCancel={() => setEditingId(null)} />
+      )}
+
+      {isLoading ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">Lädt…</div>
+      ) : profiles.length === 0 && editingId !== 'new' ? (
+        <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+          Noch kein E-Mail-Profil angelegt
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {profiles.map(p => (
+            <div key={p.id}>
+              {editingId === p.id ? (
+                <ProfileForm onCancel={() => setEditingId(null)} />
+              ) : (
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <p className="font-mono text-sm font-medium truncate">{p.email}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.notifyOnCreate && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                            erstellt
+                          </span>
+                        )}
+                        {p.notifyOnDelete && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                            gelöscht
+                          </span>
+                        )}
+                        {p.notifyOnExpire && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                            abgelaufen
+                          </span>
+                        )}
+                        {!p.notifyOnCreate && !p.notifyOnDelete && !p.notifyOnExpire && (
+                          <span className="text-xs text-muted-foreground italic">Keine Ereignisse</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1 items-center">
+                        <span className="text-[10px] text-muted-foreground font-mono mr-1">Benutzer:</span>
+                        {p.scope === 'ALL' ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border">
+                            alle
+                          </span>
+                        ) : p.userIds.length === 0 ? (
+                          <span className="text-xs text-muted-foreground italic">Keine</span>
+                        ) : (
+                          p.userIds.map(uid => {
+                            const u = users.find(x => x.id === uid)
+                            return u ? (
+                              <span key={uid} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                                {u.username}
+                              </span>
+                            ) : null
+                          })
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEdit(p)}
+                        title="Bearbeiten"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {deleteConfirmId === p.id ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Button size="sm" variant="destructive" className="h-7 px-2" disabled={deleteMutation.isPending} onClick={() => handleDelete(p.id)}>Ja</Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setDeleteConfirmId(null)}>Nein</Button>
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteConfirmId(p.id)}
+                          title="Löschen"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -2476,6 +2663,7 @@ function EinstellungenTab() {
   const [discordNotifyDelete, setDiscordNotifyDelete] = useState(true)
   const [discordNotifyExpire, setDiscordNotifyExpire] = useState(true)
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [notifTab, setNotifTab] = useState<'discord' | 'email'>('discord')
 
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
@@ -2603,75 +2791,6 @@ function EinstellungenTab() {
                 </label>
               </div>
 
-              <div className="rounded-lg border bg-card p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-medium">Discord Webhook</h4>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Webhook-URL</Label>
-                  <Input
-                    type="url"
-                    value={discordUrl}
-                    onChange={(e) => setDiscordUrl(e.target.value)}
-                    placeholder="https://discord.com/api/webhooks/..."
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={discordEnabled}
-                    onChange={(e) => setDiscordEnabled(e.target.checked)}
-                    className="accent-primary"
-                  />
-                  Discord-Benachrichtigungen aktivieren
-                </label>
-                <Separator />
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Discord — welche Ereignisse posten
-                  </p>
-                  <div className={cn('flex flex-wrap gap-4', !discordEnabled && 'opacity-50 pointer-events-none')}>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={discordNotifyCreate}
-                        onChange={(e) => setDiscordNotifyCreate(e.target.checked)}
-                        className="accent-primary"
-                        disabled={!discordEnabled}
-                      />
-                      Regel erstellt
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={discordNotifyDelete}
-                        onChange={(e) => setDiscordNotifyDelete(e.target.checked)}
-                        className="accent-primary"
-                        disabled={!discordEnabled}
-                      />
-                      Regel gelöscht
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={discordNotifyExpire}
-                        onChange={(e) => setDiscordNotifyExpire(e.target.checked)}
-                        className="accent-primary"
-                        disabled={!discordEnabled}
-                      />
-                      Regel abgelaufen
-                    </label>
-                  </div>
-                </div>
-                {settings?.updatedBy && (
-                  <p className="text-xs text-muted-foreground">
-                    Zuletzt geändert von <span className="font-mono">{settings.updatedBy}</span>
-                    {settings.updatedAt && ` · ${new Date(settings.updatedAt).toLocaleString('de-DE')}`}
-                  </p>
-                )}
-              </div>
-
               <Button type="submit" disabled={updateSettings.isPending}>
                 {settingsSaved ? (
                   <><Check className="h-4 w-4 mr-1.5" />Gespeichert</>
@@ -2680,6 +2799,128 @@ function EinstellungenTab() {
             </>
           )}
         </form>
+      </section>
+
+      {/* ── Benachrichtigungen ─────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Bell className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Benachrichtigungen</h3>
+        </div>
+
+        {/* Sub-tabs */}
+        <div className="flex gap-1 border-b">
+          <button
+            type="button"
+            onClick={() => setNotifTab('discord')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              notifTab === 'discord'
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Discord
+          </button>
+          <button
+            type="button"
+            onClick={() => setNotifTab('email')}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              notifTab === 'email'
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            E-Mail
+          </button>
+        </div>
+
+        {notifTab === 'discord' && (
+          <form onSubmit={handleSaveSettings} className="space-y-4">
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Lädt…</p>
+            ) : (
+              <>
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Webhook-URL</Label>
+                    <Input
+                      type="url"
+                      value={discordUrl}
+                      onChange={(e) => setDiscordUrl(e.target.value)}
+                      placeholder="https://discord.com/api/webhooks/..."
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={discordEnabled}
+                      onChange={(e) => setDiscordEnabled(e.target.checked)}
+                      className="accent-primary"
+                    />
+                    Discord-Benachrichtigungen aktivieren
+                  </label>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Discord — welche Ereignisse posten
+                    </p>
+                    <div className={cn('flex flex-wrap gap-4', !discordEnabled && 'opacity-50 pointer-events-none')}>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={discordNotifyCreate}
+                          onChange={(e) => setDiscordNotifyCreate(e.target.checked)}
+                          className="accent-primary"
+                          disabled={!discordEnabled}
+                        />
+                        Regel erstellt
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={discordNotifyDelete}
+                          onChange={(e) => setDiscordNotifyDelete(e.target.checked)}
+                          className="accent-primary"
+                          disabled={!discordEnabled}
+                        />
+                        Regel gelöscht
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={discordNotifyExpire}
+                          onChange={(e) => setDiscordNotifyExpire(e.target.checked)}
+                          className="accent-primary"
+                          disabled={!discordEnabled}
+                        />
+                        Regel abgelaufen
+                      </label>
+                    </div>
+                  </div>
+                  {settings?.updatedBy && (
+                    <p className="text-xs text-muted-foreground">
+                      Zuletzt geändert von <span className="font-mono">{settings.updatedBy}</span>
+                      {settings.updatedAt && ` · ${new Date(settings.updatedAt).toLocaleString('de-DE')}`}
+                    </p>
+                  )}
+                </div>
+
+                <Button type="submit" disabled={updateSettings.isPending}>
+                  {settingsSaved ? (
+                    <><Check className="h-4 w-4 mr-1.5" />Gespeichert</>
+                  ) : updateSettings.isPending ? 'Wird gespeichert…' : 'Discord-Einstellungen speichern'}
+                </Button>
+              </>
+            )}
+          </form>
+        )}
+
+        {notifTab === 'email' && (
+          <EmailProfilesSection />
+        )}
       </section>
 
       {/* ── Gesperrte Port-Bereiche ────────────────────────────────────────────── */}

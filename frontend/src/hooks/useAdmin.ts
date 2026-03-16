@@ -443,6 +443,61 @@ export function useUpdateNotificationSettings(userId: number) {
   })
 }
 
+// ── Email Notification Profiles ─────────────────────────────────────────────
+
+export interface EmailNotificationProfileDto {
+  id: number
+  email: string
+  notifyOnCreate: boolean
+  notifyOnDelete: boolean
+  notifyOnExpire: boolean
+  scope: 'ALL' | 'SPECIFIC'
+  userIds: number[]
+  createdAt: string
+}
+
+export interface SaveEmailNotificationProfileRequest {
+  email: string
+  notifyOnCreate: boolean
+  notifyOnDelete: boolean
+  notifyOnExpire: boolean
+  scope: 'ALL' | 'SPECIFIC'
+  userIds: number[]
+}
+
+export function useEmailNotificationProfiles() {
+  return useQuery<EmailNotificationProfileDto[]>({
+    queryKey: ['admin', 'email-profiles'],
+    queryFn: () => api.get('/api/admin/email-profiles').then((r) => r.data),
+  })
+}
+
+export function useCreateEmailNotificationProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: SaveEmailNotificationProfileRequest) =>
+      api.post<EmailNotificationProfileDto>('/api/admin/email-profiles', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'email-profiles'] }),
+  })
+}
+
+export function useUpdateEmailNotificationProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: SaveEmailNotificationProfileRequest }) =>
+      api.put<EmailNotificationProfileDto>(`/api/admin/email-profiles/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'email-profiles'] }),
+  })
+}
+
+export function useDeleteEmailNotificationProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/admin/email-profiles/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'email-profiles'] }),
+  })
+}
+
 // ── Admin Extend Expiry ─────────────────────────────────────────────────────────
 
 export function useAdminExtendExpiry() {

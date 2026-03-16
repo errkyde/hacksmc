@@ -1,8 +1,10 @@
 package com.hacksmc.service;
 
+import com.hacksmc.entity.EmailNotificationProfile;
 import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NotificationSettings;
 import com.hacksmc.entity.SystemSettings;
+import com.hacksmc.repository.EmailNotificationProfileRepository;
 import com.hacksmc.repository.NotificationSettingsRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,14 +22,17 @@ import java.util.Map;
 public class NotificationService {
 
     private final NotificationSettingsRepository notifRepo;
+    private final EmailNotificationProfileRepository emailProfileRepo;
     private final MaintenanceService maintenanceService;
     private final JavaMailSender mailSender;
     private final RestClient restClient;
 
     public NotificationService(NotificationSettingsRepository notifRepo,
+                                EmailNotificationProfileRepository emailProfileRepo,
                                 MaintenanceService maintenanceService,
                                 @Autowired(required = false) JavaMailSender mailSender) {
         this.notifRepo = notifRepo;
+        this.emailProfileRepo = emailProfileRepo;
         this.maintenanceService = maintenanceService;
         this.mailSender = mailSender;
         this.restClient = RestClient.create();
@@ -48,12 +53,22 @@ public class NotificationService {
             String subject = "[HackSMC] Regel " + action.toLowerCase() + ": " + hostName + " " + rule.getProtocol() + ":" + portStr;
             String body = buildEmailBody(action, rule, hostName, portStr, actorUsername);
 
-            // Email notifications
+            // Email notifications (legacy per-user settings)
             if (mailSender != null) {
                 List<NotificationSettings> eligible = notifRepo.findAllWithEmailEnabled();
                 for (NotificationSettings ns : eligible) {
                     if (!shouldNotify(ns, action, hostId, actorUsername)) continue;
                     sendEmail(ns.getEmail(), subject, body);
+                }
+            }
+
+            // Email notification profiles
+            if (mailSender != null) {
+                Long actorUserId = rule.getUser().getId();
+                List<EmailNotificationProfile> profiles = emailProfileRepo.findAllByOrderByCreatedAtAsc();
+                for (EmailNotificationProfile p : profiles) {
+                    if (!shouldNotifyProfile(p, action, actorUserId)) continue;
+                    sendEmail(p.getEmail(), subject, body);
                 }
             }
 
@@ -78,6 +93,14 @@ public class NotificationService {
         if ("EXPIRED".equals(action) && !ns.isNotifyOnExpire()) return false;
         if (!ns.isNotifyAllHosts() && !ns.getHostFilter().isEmpty() && !ns.getHostFilter().contains(hostId)) return false;
         if ("OWN".equals(ns.getNotifyScope()) && !actorUsername.equals(ns.getUser().getUsername())) return false;
+        return true;
+    }
+
+    private boolean shouldNotifyProfile(EmailNotificationProfile p, String action, Long actorUserId) {
+        if ("CREATED".equals(action) && !p.isNotifyOnCreate()) return false;
+        if ("DELETED".equals(action) && !p.isNotifyOnDelete()) return false;
+        if ("EXPIRED".equals(action) && !p.isNotifyOnExpire()) return false;
+        if ("SPECIFIC".equals(p.getScope()) && !p.getUserIds().contains(actorUserId)) return false;
         return true;
     }
 
