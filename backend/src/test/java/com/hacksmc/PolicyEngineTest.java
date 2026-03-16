@@ -4,6 +4,7 @@ import com.hacksmc.entity.Host;
 import com.hacksmc.entity.NatRuleStatus;
 import com.hacksmc.entity.Policy;
 import com.hacksmc.exception.PolicyViolationException;
+import com.hacksmc.repository.BlockedPortRangeRepository;
 import com.hacksmc.repository.NatRuleRepository;
 import com.hacksmc.service.PolicyEngine;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import static org.mockito.Mockito.*;
 class PolicyEngineTest {
 
     @Mock NatRuleRepository natRuleRepository;
+    @Mock BlockedPortRangeRepository blockedPortRangeRepository;
     @InjectMocks PolicyEngine policyEngine;
 
     private static final Long USER_ID = 1L;

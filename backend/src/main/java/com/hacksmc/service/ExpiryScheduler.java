@@ -20,6 +20,7 @@ public class ExpiryScheduler {
     private final NatRuleRepository natRuleRepository;
     private final PfSenseApiClient pfSenseApiClient;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     @Scheduled(fixedRate = 60_000)
     @Transactional
@@ -42,6 +43,7 @@ public class ExpiryScheduler {
                 auditLogService.log("scheduler", "NAT_RULE_EXPIRED",
                         rule.getHost().getName(),
                         rule.getProtocol() + ":" + portRangeStr(rule.getPortStart(), rule.getPortEnd()));
+                notificationService.notifyRuleEvent("EXPIRED", rule);
                 log.info("Expired rule id={} ({}:{})", rule.getId(), rule.getProtocol(),
                         portRangeStr(rule.getPortStart(), rule.getPortEnd()));
             } catch (Exception e) {

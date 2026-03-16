@@ -2,9 +2,13 @@ package com.hacksmc.controller;
 
 import com.hacksmc.dto.*;
 import com.hacksmc.entity.ErrorLog;
+import com.hacksmc.repository.BlockedPortRangeRepository;
 import com.hacksmc.repository.ErrorLogRepository;
+import com.hacksmc.repository.NotificationSettingsRepository;
 import com.hacksmc.service.AdminService;
 import com.hacksmc.service.HostPingService;
+import com.hacksmc.service.MaintenanceService;
+import com.hacksmc.service.NatRuleService;
 import com.hacksmc.service.NetworkScanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +31,10 @@ public class AdminController {
     private final HostPingService hostPingService;
     private final com.hacksmc.repository.HostRepository hostRepository;
     private final ErrorLogRepository errorLogRepository;
+    private final MaintenanceService maintenanceService;
+    private final NotificationSettingsRepository notificationSettingsRepository;
+    private final BlockedPortRangeRepository blockedPortRangeRepository;
+    private final NatRuleService natRuleService;
 
     // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -177,5 +186,97 @@ public class AdminController {
     @PostMapping("/hosts/scan")
     public List<ScannedHostResult> scanNetwork(@Valid @RequestBody NetworkScanRequest req) {
         return networkScanService.scan(req.getSubnet());
+    }
+
+    // ── System Settings ────────────────────────────────────────────────────────
+
+    @GetMapping("/settings")
+    public SystemSettingsDto getSettings() {
+        return maintenanceService.toDto(maintenanceService.getSettings());
+    }
+
+    @PutMapping("/settings")
+    public SystemSettingsDto updateSettings(
+            @RequestBody UpdateSystemSettingsRequest req,
+            Principal principal) {
+        return maintenanceService.update(req, principal.getName());
+    }
+
+    // ── Blocked Port Ranges ────────────────────────────────────────────────────
+
+    @GetMapping("/blocked-ranges")
+    public List<BlockedPortRangeDto> getBlockedRanges() {
+        return blockedPortRangeRepository.findAll().stream()
+                .map(r -> new BlockedPortRangeDto(r.getId(), r.getPortStart(), r.getPortEnd(), r.getReason(), r.getCreatedAt()))
+                .toList();
+    }
+
+    @PostMapping("/blocked-ranges")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BlockedPortRangeDto createBlockedRange(
+            @Valid @RequestBody CreateBlockedRangeRequest req) {
+        com.hacksmc.entity.BlockedPortRange r = new com.hacksmc.entity.BlockedPortRange();
+        r.setPortStart(req.portStart());
+        r.setPortEnd(req.portEnd());
+        r.setReason(req.reason());
+        r = blockedPortRangeRepository.save(r);
+        return new BlockedPortRangeDto(r.getId(), r.getPortStart(), r.getPortEnd(), r.getReason(), r.getCreatedAt());
+    }
+
+    @DeleteMapping("/blocked-ranges/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBlockedRange(@PathVariable Long id) {
+        if (!blockedPortRangeRepository.existsById(id)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "Blocked range not found");
+        }
+        blockedPortRangeRepository.deleteById(id);
+    }
+
+    // ── Notification Settings ──────────────────────────────────────────────────
+
+    @GetMapping("/users/{userId}/notifications")
+    public NotificationSettingsDto getNotificationSettings(@PathVariable Long userId) {
+        return notificationSettingsRepository.findByUserId(userId)
+                .map(ns -> toNotifDto(ns))
+                .orElse(new NotificationSettingsDto(null, userId, null, false, true, true, true, true, "OWN", java.util.Set.of()));
+    }
+
+    @PutMapping("/users/{userId}/notifications")
+    public NotificationSettingsDto updateNotificationSettings(
+            @PathVariable Long userId,
+            @RequestBody UpdateNotificationSettingsRequest req) {
+        com.hacksmc.entity.User user = adminService.getUserEntity(userId);
+        com.hacksmc.entity.NotificationSettings ns = notificationSettingsRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    com.hacksmc.entity.NotificationSettings n = new com.hacksmc.entity.NotificationSettings();
+                    n.setUser(user);
+                    return n;
+                });
+        ns.setEmail(req.email());
+        ns.setEmailEnabled(req.emailEnabled());
+        ns.setNotifyOnCreate(req.notifyOnCreate());
+        ns.setNotifyOnDelete(req.notifyOnDelete());
+        ns.setNotifyOnExpire(req.notifyOnExpire());
+        ns.setNotifyAllHosts(req.notifyAllHosts());
+        ns.setNotifyScope(req.notifyScope() != null ? req.notifyScope() : "OWN");
+        ns.setHostFilter(req.hostFilter() != null ? req.hostFilter() : java.util.Set.of());
+        ns = notificationSettingsRepository.save(ns);
+        return toNotifDto(ns);
+    }
+
+    // ── Admin Expiry ───────────────────────────────────────────────────────────
+
+    @PatchMapping("/rules/{id}/expiry")
+    public com.hacksmc.entity.NatRule extendExpiryAsAdmin(@PathVariable Long id,
+            @RequestBody UpdateExpiryRequest req) {
+        return natRuleService.extendExpiryAsAdmin(id, req.expiresAt());
+    }
+
+    private NotificationSettingsDto toNotifDto(com.hacksmc.entity.NotificationSettings ns) {
+        return new NotificationSettingsDto(
+                ns.getId(), ns.getUser().getId(), ns.getEmail(), ns.isEmailEnabled(),
+                ns.isNotifyOnCreate(), ns.isNotifyOnDelete(), ns.isNotifyOnExpire(),
+                ns.isNotifyAllHosts(), ns.getNotifyScope(), new java.util.HashSet<>(ns.getHostFilter()));
     }
 }

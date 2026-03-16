@@ -44,4 +44,10 @@ public class NatRuleController {
     public void deleteRule(Principal principal, @PathVariable Long id) {
         natRuleService.deleteRule(principal.getName(), id);
     }
+
+    @PatchMapping("/{id}/expiry")
+    public NatRule extendExpiry(Principal principal, @PathVariable Long id,
+                                @RequestBody com.hacksmc.dto.UpdateExpiryRequest req) {
+        return natRuleService.extendExpiry(principal.getName(), id, req.expiresAt());
+    }
 }

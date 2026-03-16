@@ -321,6 +321,11 @@ public class AdminService {
         );
     }
 
+    public com.hacksmc.entity.User getUserEntity(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private String currentAdmin() {

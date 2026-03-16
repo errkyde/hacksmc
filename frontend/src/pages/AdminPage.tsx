@@ -20,15 +20,24 @@ import {
   useAdminRules,
   useAdminDeleteRule,
   useAdminBulkDeleteRules,
+  useAdminExtendExpiry,
   useAuditLog,
   usePfSenseStatus,
   useAdminErrors,
+  useSystemSettings,
+  useUpdateSystemSettings,
+  useBlockedPortRanges,
+  useCreateBlockedRange,
+  useDeleteBlockedRange,
+  useNotificationSettings,
+  useUpdateNotificationSettings,
   type AdminUser,
   type HostDto,
   type ScannedHost,
   type AdminNatRule,
   type AuditLogEntry,
   type ErrorLogEntry,
+  type SystemSettingsDto,
 } from '@/hooks/useAdmin'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -61,7 +70,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, AlertTriangle, Activity, Clock } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Pencil, Server, RefreshCw, Copy, Check, Users, Users2, Network, KeyRound, Lock, Unlock, ScrollText, Wifi, ScanLine, AlertCircle, AlertTriangle, Activity, Clock, Settings, Shield, Bell, Calendar } from 'lucide-react'
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -214,6 +223,7 @@ function NatRulesTab() {
   const { data: rules = [], isLoading } = useAdminRules()
   const deleteMutation = useAdminDeleteRule()
   const bulkDeleteMutation = useAdminBulkDeleteRules()
+  const extendMutation = useAdminExtendExpiry()
   const { toast } = useToast()
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | AdminNatRule['status']>('ALL')
@@ -222,6 +232,8 @@ function NatRulesTab() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkConfirm, setBulkConfirm] = useState(false)
+  const [extendRuleId, setExtendRuleId] = useState<number | null>(null)
+  const [extendExpiry, setExtendExpiry] = useState('')
 
   const uniqueProtocols = [...new Set(rules.map((r) => r.protocol))].sort()
 
@@ -275,6 +287,18 @@ function NatRulesTab() {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Bulk-Löschen fehlgeschlagen'
       toast({ title: 'Fehler', description: msg, variant: 'destructive' })
       setBulkConfirm(false)
+    }
+  }
+
+  async function handleExtend(id: number) {
+    try {
+      await extendMutation.mutateAsync({ id, expiresAt: extendExpiry ? new Date(extendExpiry).toISOString() : null })
+      setExtendRuleId(null)
+      setExtendExpiry('')
+      toast({ title: 'Ablaufzeit aktualisiert' })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Aktualisierung fehlgeschlagen'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
     }
   }
 
@@ -415,16 +439,45 @@ function NatRulesTab() {
                   </TableCell>
                   <TableCell className="text-right">
                     {rule.status !== 'DELETED' && (
-                      deleteConfirmId === rule.id ? (
+                      extendRuleId === rule.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Input
+                            type="datetime-local"
+                            value={extendExpiry}
+                            onChange={(e) => setExtendExpiry(e.target.value)}
+                            min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                            className="h-7 text-xs font-mono w-[170px]"
+                          />
+                          <Button size="sm" variant="default" disabled={extendMutation.isPending} onClick={() => handleExtend(rule.id)}>
+                            Speichern
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setExtendRuleId(null); setExtendExpiry('') }}>✕</Button>
+                        </span>
+                      ) : deleteConfirmId === rule.id ? (
                         <span className="inline-flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">Löschen?</span>
                           <Button size="sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => handleDelete(rule.id)}>Ja</Button>
                           <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(null)}>Nein</Button>
                         </span>
                       ) : (
-                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirmId(rule.id)}>
-                          Löschen
-                        </Button>
+                        <span className="inline-flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-primary text-xs"
+                            onClick={() => {
+                              setExtendRuleId(rule.id)
+                              setExtendExpiry(rule.expiresAt ? new Date(rule.expiresAt).toISOString().slice(0, 16) : '')
+                              setDeleteConfirmId(null)
+                            }}
+                          >
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Verlängern
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => { setDeleteConfirmId(rule.id); setExtendRuleId(null) }}>
+                            Löschen
+                          </Button>
+                        </span>
                       )
                     )}
                   </TableCell>
@@ -1195,6 +1248,113 @@ function EditPolicyDialog({
 
 // ─── User Hosts Section (expanded per user) ────────────────────────────────────
 
+function NotificationSection({ userId }: { userId: number }) {
+  const { data: ns, isLoading } = useNotificationSettings(userId)
+  const updateMutation = useUpdateNotificationSettings(userId)
+  const { toast } = useToast()
+  const [open, setOpen] = useState(false)
+
+  const [email, setEmail] = useState('')
+  const [emailEnabled, setEmailEnabled] = useState(false)
+  const [notifyOnCreate, setNotifyOnCreate] = useState(true)
+  const [notifyOnDelete, setNotifyOnDelete] = useState(true)
+  const [notifyOnExpire, setNotifyOnExpire] = useState(true)
+  const [notifyScope, setNotifyScope] = useState<'OWN' | 'ALL'>('OWN')
+
+  useEffect(() => {
+    if (ns) {
+      setEmail(ns.email ?? '')
+      setEmailEnabled(ns.emailEnabled)
+      setNotifyOnCreate(ns.notifyOnCreate)
+      setNotifyOnDelete(ns.notifyOnDelete)
+      setNotifyOnExpire(ns.notifyOnExpire)
+      setNotifyScope(ns.notifyScope)
+    }
+  }, [ns])
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await updateMutation.mutateAsync({
+        email: email.trim() || null,
+        emailEnabled,
+        notifyOnCreate,
+        notifyOnDelete,
+        notifyOnExpire,
+        notifyAllHosts: ns?.notifyAllHosts ?? true,
+        notifyScope,
+        hostFilter: ns?.hostFilter ?? [],
+      })
+      toast({ title: 'Benachrichtigungen gespeichert' })
+      setOpen(false)
+    } catch {
+      toast({ title: 'Fehler', description: 'Speichern fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/50">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Bell className="h-3 w-3" /> Benachrichtigungen
+        </p>
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setOpen(!open)}>
+          {open ? 'Schließen' : 'Bearbeiten'}
+        </Button>
+      </div>
+      {open && (
+        <form onSubmit={handleSave} className="mt-3 space-y-3">
+          {isLoading ? (
+            <p className="text-xs text-muted-foreground">Lädt…</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="E-Mail-Adresse"
+                  className="h-8 text-xs flex-1"
+                />
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} className="accent-primary" />
+                  E-Mail aktiv
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={notifyOnCreate} onChange={(e) => setNotifyOnCreate(e.target.checked)} className="accent-primary" />
+                  Bei Erstellen
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={notifyOnDelete} onChange={(e) => setNotifyOnDelete(e.target.checked)} className="accent-primary" />
+                  Bei Löschen
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={notifyOnExpire} onChange={(e) => setNotifyOnExpire(e.target.checked)} className="accent-primary" />
+                  Bei Ablauf
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyScope === 'ALL'}
+                    onChange={(e) => setNotifyScope(e.target.checked ? 'ALL' : 'OWN')}
+                    className="accent-primary"
+                  />
+                  Alle Regeln (nicht nur eigene)
+                </label>
+              </div>
+              <Button type="submit" size="sm" variant="outline" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'Wird gespeichert…' : 'Speichern'}
+              </Button>
+            </>
+          )}
+        </form>
+      )}
+    </div>
+  )
+}
+
 function UserHostsSection({ user }: { user: AdminUser }) {
   const { data: hosts = [], isLoading } = useUserHosts(user.id)
   const unassignHost = useUnassignHost(user.id)
@@ -1325,6 +1485,8 @@ function UserHostsSection({ user }: { user: AdminUser }) {
           </Table>
         </div>
       )}
+
+      <NotificationSection userId={user.id} />
 
       <AssignHostDialog
         userId={user.id}
@@ -2284,15 +2446,291 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.2.0</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.3.0</span>
       </div>
+    </div>
+  )
+}
+
+// ─── Einstellungen Tab ─────────────────────────────────────────────────────────
+
+function EinstellungenTab() {
+  const { data: settings, isLoading } = useSystemSettings()
+  const updateSettings = useUpdateSystemSettings()
+  const { data: blockedRanges = [], isLoading: rangesLoading } = useBlockedPortRanges()
+  const createRange = useCreateBlockedRange()
+  const deleteRange = useDeleteBlockedRange()
+  const { toast } = useToast()
+
+  const [pfMaintenance, setPfMaintenance] = useState(false)
+  const [siteMaintenance, setSiteMaintenance] = useState(false)
+  const [discordUrl, setDiscordUrl] = useState('')
+  const [discordEnabled, setDiscordEnabled] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
+  const [rangeReason, setRangeReason] = useState('')
+  const [deleteConfirmRangeId, setDeleteConfirmRangeId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (settings) {
+      setPfMaintenance(settings.pfSenseMaintenance)
+      setSiteMaintenance(settings.siteMaintenance)
+      setDiscordUrl(settings.discordWebhookUrl ?? '')
+      setDiscordEnabled(settings.discordEnabled)
+    }
+  }, [settings])
+
+  async function handleSaveSettings(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await updateSettings.mutateAsync({
+        pfSenseMaintenance: pfMaintenance,
+        siteMaintenance,
+        discordWebhookUrl: discordUrl.trim() || null,
+        discordEnabled,
+      } as SystemSettingsDto)
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 2000)
+      toast({ title: 'Einstellungen gespeichert' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Speichern fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  async function handleCreateRange(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await createRange.mutateAsync({
+        portStart: Number(rangeStart),
+        portEnd: Number(rangeEnd || rangeStart),
+        reason: rangeReason.trim() || undefined,
+      })
+      setRangeStart('')
+      setRangeEnd('')
+      setRangeReason('')
+      toast({ title: 'Port-Bereich gesperrt' })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Fehler'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
+    }
+  }
+
+  async function handleDeleteRange(id: number) {
+    try {
+      await deleteRange.mutateAsync(id)
+      setDeleteConfirmRangeId(null)
+      toast({ title: 'Port-Bereich entsperrt' })
+    } catch {
+      toast({ title: 'Fehler', description: 'Löschen fehlgeschlagen', variant: 'destructive' })
+    }
+  }
+
+  return (
+    <div className="space-y-10 max-w-2xl">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight mb-1">Einstellungen</h2>
+        <p className="text-sm text-muted-foreground">Systemkonfiguration und Sicherheitseinstellungen</p>
+      </div>
+
+      {/* ── Wartungsmodus ─────────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Shield className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Wartungsmodus</h3>
+        </div>
+
+        <form onSubmit={handleSaveSettings} className="space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Lädt…</p>
+          ) : (
+            <>
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pfMaintenance}
+                    onChange={(e) => setPfMaintenance(e.target.checked)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      pfSense-Wartungsmodus
+                      {pfMaintenance && (
+                        <span className="text-xs font-mono text-amber-400 border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 rounded">AKTIV</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Sperrt alle pfSense-API-Operationen (Erstellen/Löschen von NAT-Regeln). Nur für Admins sichtbar.
+                    </p>
+                  </div>
+                </label>
+                <Separator />
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={siteMaintenance}
+                    onChange={(e) => setSiteMaintenance(e.target.checked)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      Website-Wartungsmodus
+                      {siteMaintenance && (
+                        <span className="text-xs font-mono text-red-400 border border-red-400/30 bg-red-400/10 px-1.5 py-0.5 rounded">AKTIV</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Nicht-Admin-Benutzer können sich nicht einloggen. Nur Admins haben Zugang.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="rounded-lg border bg-card p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <h4 className="text-sm font-medium">Discord Webhook</h4>
+                </div>
+                <Input
+                  type="url"
+                  value={discordUrl}
+                  onChange={(e) => setDiscordUrl(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="font-mono text-xs"
+                />
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={discordEnabled}
+                    onChange={(e) => setDiscordEnabled(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  Discord-Benachrichtigungen aktivieren
+                </label>
+                {settings?.updatedBy && (
+                  <p className="text-xs text-muted-foreground">
+                    Zuletzt geändert von <span className="font-mono">{settings.updatedBy}</span>
+                    {settings.updatedAt && ` · ${new Date(settings.updatedAt).toLocaleString('de-DE')}`}
+                  </p>
+                )}
+              </div>
+
+              <Button type="submit" disabled={updateSettings.isPending}>
+                {settingsSaved ? (
+                  <><Check className="h-4 w-4 mr-1.5" />Gespeichert</>
+                ) : updateSettings.isPending ? 'Wird gespeichert…' : 'Einstellungen speichern'}
+              </Button>
+            </>
+          )}
+        </form>
+      </section>
+
+      {/* ── Gesperrte Port-Bereiche ────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Lock className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Gesperrte Port-Bereiche</h3>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Diese Port-Bereiche sind für alle Benutzer gesperrt und können nicht in NAT-Regeln verwendet werden.
+        </p>
+
+        <form onSubmit={handleCreateRange} className="flex gap-2 flex-wrap items-end">
+          <div className="space-y-1">
+            <Label className="text-xs">Start</Label>
+            <Input
+              type="number"
+              value={rangeStart}
+              onChange={(e) => setRangeStart(e.target.value)}
+              placeholder="Von"
+              min={1}
+              max={65535}
+              required
+              className="font-mono w-24 h-8"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Ende</Label>
+            <Input
+              type="number"
+              value={rangeEnd}
+              onChange={(e) => setRangeEnd(e.target.value)}
+              placeholder="Bis"
+              min={1}
+              max={65535}
+              className="font-mono w-24 h-8"
+            />
+          </div>
+          <div className="space-y-1 flex-1 min-w-[160px]">
+            <Label className="text-xs">Grund (optional)</Label>
+            <Input
+              value={rangeReason}
+              onChange={(e) => setRangeReason(e.target.value)}
+              placeholder="z.B. System-Port"
+              className="h-8 text-sm"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline" disabled={createRange.isPending || !rangeStart} className="h-8">
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Sperren
+          </Button>
+        </form>
+
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {rangesLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Lädt…</div>
+          ) : blockedRanges.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">Keine gesperrten Bereiche</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Port-Bereich</TableHead>
+                  <TableHead>Grund</TableHead>
+                  <TableHead>Erstellt</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {blockedRanges.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono text-sm font-semibold text-primary">
+                      {r.portStart === r.portEnd ? r.portStart : `${r.portStart}–${r.portEnd}`}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {r.reason ?? <span className="italic text-xs">—</span>}
+                    </TableCell>
+                    <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                      {new Date(r.createdAt).toLocaleString('de-DE')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {deleteConfirmRangeId === r.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Entsperren?</span>
+                          <Button size="sm" variant="destructive" disabled={deleteRange.isPending} onClick={() => handleDeleteRange(r.id)}>Ja</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmRangeId(null)}>Nein</Button>
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirmRangeId(r.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </section>
     </div>
   )
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'hosts' | 'rules' | 'audit' | 'pfsense'
+type Tab = 'users' | 'hosts' | 'rules' | 'audit' | 'pfsense' | 'settings'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'users', label: 'Benutzer', icon: <Users className="h-4 w-4" /> },
@@ -2300,6 +2738,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'rules', label: 'NAT-Regeln', icon: <Network className="h-4 w-4" /> },
   { id: 'audit', label: 'Audit-Log', icon: <ScrollText className="h-4 w-4" /> },
   { id: 'pfsense', label: 'pfSense', icon: <Wifi className="h-4 w-4" /> },
+  { id: 'settings', label: 'Einstellungen', icon: <Settings className="h-4 w-4" /> },
 ]
 
 export default function AdminPage() {
@@ -2330,6 +2769,7 @@ export default function AdminPage() {
       {activeTab === 'rules' && <NatRulesTab />}
       {activeTab === 'audit' && <AuditLogTab />}
       {activeTab === 'pfsense' && <PfSenseTab />}
+      {activeTab === 'settings' && <EinstellungenTab />}
     </Layout>
   )
 }

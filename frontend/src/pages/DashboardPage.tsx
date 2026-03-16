@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import { useHosts } from '@/hooks/useHosts'
@@ -7,8 +8,11 @@ import { useHostStatus } from '@/hooks/useHostStatus'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { Wifi, WifiOff } from 'lucide-react'
+
+type SortKey = 'name-asc' | 'name-desc' | 'rules-asc' | 'rules-desc' | 'status'
 
 export default function DashboardPage() {
   const { data: hosts = [], isLoading: hostsLoading } = useHosts()
@@ -16,9 +20,26 @@ export default function DashboardPage() {
   const { data: policies = [] } = usePolicies()
   const { data: hostStatus = {}, isLoading: statusLoading } = useHostStatus()
 
+  const [sortKey, setSortKey] = useState<SortKey>('name-asc')
+
   const activeRules = rules.filter((r) => r.status === 'ACTIVE')
   const pendingRules = rules.filter((r) => r.status === 'PENDING')
   const isLoading = hostsLoading || rulesLoading
+
+  const sortedHosts = [...hosts].sort((a, b) => {
+    const aActive = activeRules.filter((r) => r.host.id === a.id).length
+    const bActive = activeRules.filter((r) => r.host.id === b.id).length
+    const aOnline = hostStatus[a.id] ? 1 : 0
+    const bOnline = hostStatus[b.id] ? 1 : 0
+    switch (sortKey) {
+      case 'name-asc': return a.name.localeCompare(b.name)
+      case 'name-desc': return b.name.localeCompare(a.name)
+      case 'rules-asc': return aActive - bActive
+      case 'rules-desc': return bActive - aActive
+      case 'status': return bOnline - aOnline
+      default: return 0
+    }
+  })
 
   return (
     <Layout>
@@ -57,9 +78,23 @@ export default function DashboardPage() {
       {/* Host grid */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold">Your Hosts</h3>
-        <Link to="/rules" className="text-xs text-primary hover:text-primary/80 transition-colors">
-          Manage rules →
-        </Link>
+        <div className="flex items-center gap-3">
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+            <SelectTrigger className="h-8 w-[160px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name-asc">Name A–Z</SelectItem>
+              <SelectItem value="name-desc">Name Z–A</SelectItem>
+              <SelectItem value="rules-desc">Most rules</SelectItem>
+              <SelectItem value="rules-asc">Fewest rules</SelectItem>
+              <SelectItem value="status">Online first</SelectItem>
+            </SelectContent>
+          </Select>
+          <Link to="/rules" className="text-xs text-primary hover:text-primary/80 transition-colors">
+            Manage rules →
+          </Link>
+        </div>
       </div>
 
       {hostsLoading ? (
@@ -84,7 +119,7 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {hosts.map((host) => {
+          {sortedHosts.map((host) => {
             const policy = policies.find((p) => p.host.id === host.id)
             const hostActiveRules = activeRules.filter((r) => r.host.id === host.id)
             const maxRules = policy?.maxRules ?? 0

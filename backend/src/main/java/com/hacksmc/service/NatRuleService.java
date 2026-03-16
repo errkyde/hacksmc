@@ -6,6 +6,7 @@ import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NatRuleStatus;
 import com.hacksmc.entity.Policy;
 import com.hacksmc.entity.User;
+import com.hacksmc.exception.PolicyViolationException;
 import com.hacksmc.repository.HostRepository;
 import com.hacksmc.repository.NatRuleRepository;
 import com.hacksmc.repository.PolicyRepository;
@@ -33,6 +34,8 @@ public class NatRuleService {
     private final PolicyEngine policyEngine;
     private final PfSenseApiClient pfSenseApiClient;
     private final AuditLogService auditLogService;
+    private final MaintenanceService maintenanceService;
+    private final NotificationService notificationService;
 
     @Transactional
     public List<NatRule> getRulesForUser(String username) {
@@ -77,6 +80,10 @@ public class NatRuleService {
 
     @Transactional
     public NatRule createRule(String username, CreateNatRuleRequest request) {
+        if (maintenanceService.getSettings().isPfSenseMaintenance()) {
+            throw new com.hacksmc.exception.MaintenanceException("pfSense befindet sich im Wartungsmodus — bitte später erneut versuchen");
+        }
+
         User user = getUser(username);
 
         // Verify user has a policy (assignment) for this host
@@ -110,6 +117,7 @@ public class NatRuleService {
         natRuleRepository.save(rule);
         auditLogService.log(username, "NAT_RULE_CREATED", host.getName(),
                 request.protocol().toUpperCase() + ":" + portRangeStr(request.portStart(), request.portEnd()));
+        notificationService.notifyRuleEvent("CREATED", rule);
         return rule;
     }
 
@@ -125,7 +133,7 @@ public class NatRuleService {
                 request.portStart(), request.portEnd(),
                 List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE));
         if (rangeInUse) {
-            throw new com.hacksmc.exception.PolicyViolationException(
+            throw new PolicyViolationException(
                     "Port range " + request.portStart() + "-" + request.portEnd() + " overlaps with an existing rule");
         }
 
@@ -155,6 +163,10 @@ public class NatRuleService {
 
     @Transactional
     public void deleteRule(String username, Long ruleId) {
+        if (maintenanceService.getSettings().isPfSenseMaintenance()) {
+            throw new com.hacksmc.exception.MaintenanceException("pfSense befindet sich im Wartungsmodus — bitte später erneut versuchen");
+        }
+
         User user = getUser(username);
         NatRule rule = natRuleRepository.findByIdAndUserId(ruleId, user.getId())
                 .orElseThrow(() -> new AccessDeniedException("Rule not found or not owned by user"));
@@ -173,6 +185,36 @@ public class NatRuleService {
         natRuleRepository.save(rule);
         auditLogService.log(username, "NAT_RULE_DELETED", rule.getHost().getName(),
                 rule.getProtocol() + ":" + portRangeStr(rule.getPortStart(), rule.getPortEnd()));
+        notificationService.notifyRuleEvent("DELETED", rule);
+    }
+
+    @Transactional
+    public NatRule extendExpiry(String username, Long ruleId, java.time.Instant expiresAt) {
+        User user = getUser(username);
+        NatRule rule = natRuleRepository.findByIdAndUserId(ruleId, user.getId())
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Rule not found or not owned by user"));
+        if (rule.getStatus() == NatRuleStatus.DELETED) {
+            throw new java.util.NoSuchElementException("Cannot extend a deleted rule");
+        }
+        if (expiresAt != null && expiresAt.isBefore(java.time.Instant.now())) {
+            throw new com.hacksmc.exception.PolicyViolationException("expiresAt must be in the future");
+        }
+        rule.setExpiresAt(expiresAt);
+        return natRuleRepository.save(rule);
+    }
+
+    @Transactional
+    public NatRule extendExpiryAsAdmin(Long ruleId, java.time.Instant expiresAt) {
+        NatRule rule = natRuleRepository.findById(ruleId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Rule not found: " + ruleId));
+        if (rule.getStatus() == NatRuleStatus.DELETED) {
+            throw new java.util.NoSuchElementException("Cannot extend a deleted rule");
+        }
+        if (expiresAt != null && expiresAt.isBefore(java.time.Instant.now())) {
+            throw new com.hacksmc.exception.PolicyViolationException("expiresAt must be in the future");
+        }
+        rule.setExpiresAt(expiresAt);
+        return natRuleRepository.save(rule);
     }
 
     private static String portRangeStr(int portStart, int portEnd) {

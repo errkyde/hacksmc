@@ -20,6 +20,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuditLogService auditLogService;
+    private final MaintenanceService maintenanceService;
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
@@ -31,6 +32,13 @@ public class AuthService {
 
         if (!user.isEnabled()) {
             throw new BadCredentialsException("Invalid credentials");
+        }
+
+        if (!user.getRole().equals("ADMIN")) {
+            com.hacksmc.entity.SystemSettings settings = maintenanceService.getSettings();
+            if (settings.isSiteMaintenance()) {
+                throw new com.hacksmc.exception.MaintenanceException(settings.getSiteMaintenanceMessage());
+            }
         }
 
         auditLogService.log(user.getUsername(), "LOGIN", null, null);

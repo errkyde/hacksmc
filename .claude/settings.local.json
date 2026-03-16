@@ -18,7 +18,31 @@
       "Bash(echo JAVA_HOME=$JAVA_HOME:*)",
       "Bash(JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 mvn compile:*)",
       "Bash(git branch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(git:*)",
+      "Bash(ssh-add:*)",
+      "Bash(ssh-keygen:*)",
+      "Bash(javac:*)",
+      "Bash(psql:*)",
+      "Bash(su:*)",
+      "WebFetch(domain:pfrest.org)",
+      "Bash(systemctl is-active:*)",
+      "Bash(PGPASSWORD=change_me psql:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(mvn compile:*)",
+      "Bash(mvn test:*)",
+      "WebSearch",
+      "WebFetch(domain:rmannibucau.github.io)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(mvn:*)",
+      "Bash(gh run:*)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:dockhand.pro)"
     ]
   }
 }

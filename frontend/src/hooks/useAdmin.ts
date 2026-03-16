@@ -346,3 +346,107 @@ export function usePfSenseStatus() {
     refetchInterval: 60_000,
   })
 }
+
+// ── System Settings ─────────────────────────────────────────────────────────────
+
+export interface SystemSettingsDto {
+  pfSenseMaintenance: boolean
+  siteMaintenance: boolean
+  discordWebhookUrl: string | null
+  discordEnabled: boolean
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
+export function useSystemSettings() {
+  return useQuery<SystemSettingsDto>({
+    queryKey: ['admin', 'settings'],
+    queryFn: () => api.get('/api/admin/settings').then((r) => r.data),
+  })
+}
+
+export function useUpdateSystemSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Partial<SystemSettingsDto>) =>
+      api.put<SystemSettingsDto>('/api/admin/settings', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'settings'] }),
+  })
+}
+
+// ── Blocked Port Ranges ─────────────────────────────────────────────────────────
+
+export interface BlockedPortRangeDto {
+  id: number
+  portStart: number
+  portEnd: number
+  reason: string | null
+  createdAt: string
+}
+
+export function useBlockedPortRanges() {
+  return useQuery<BlockedPortRangeDto[]>({
+    queryKey: ['admin', 'blocked-ranges'],
+    queryFn: () => api.get('/api/admin/blocked-ranges').then((r) => r.data),
+  })
+}
+
+export function useCreateBlockedRange() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { portStart: number; portEnd: number; reason?: string }) =>
+      api.post<BlockedPortRangeDto>('/api/admin/blocked-ranges', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'blocked-ranges'] }),
+  })
+}
+
+export function useDeleteBlockedRange() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/admin/blocked-ranges/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'blocked-ranges'] }),
+  })
+}
+
+// ── Notification Settings ───────────────────────────────────────────────────────
+
+export interface NotificationSettingsDto {
+  id: number | null
+  userId: number
+  email: string | null
+  emailEnabled: boolean
+  notifyOnCreate: boolean
+  notifyOnDelete: boolean
+  notifyOnExpire: boolean
+  notifyAllHosts: boolean
+  notifyScope: 'OWN' | 'ALL'
+  hostFilter: number[]
+}
+
+export function useNotificationSettings(userId: number | null) {
+  return useQuery<NotificationSettingsDto>({
+    queryKey: ['admin', 'users', userId, 'notifications'],
+    queryFn: () => api.get(`/api/admin/users/${userId}/notifications`).then((r) => r.data),
+    enabled: userId !== null,
+  })
+}
+
+export function useUpdateNotificationSettings(userId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Omit<NotificationSettingsDto, 'id' | 'userId'>) =>
+      api.put<NotificationSettingsDto>(`/api/admin/users/${userId}/notifications`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users', userId, 'notifications'] }),
+  })
+}
+
+// ── Admin Extend Expiry ─────────────────────────────────────────────────────────
+
+export function useAdminExtendExpiry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, expiresAt }: { id: number; expiresAt: string | null }) =>
+      api.patch(`/api/admin/rules/${id}/expiry`, { expiresAt }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'rules'] }),
+  })
+}

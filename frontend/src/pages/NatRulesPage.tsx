@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import Layout from '@/components/Layout'
 import { useHosts, useAdminHosts } from '@/hooks/useHosts'
-import { useNatRules, useCreateNatRule, useCreateNatRuleAdmin, useDeleteNatRule, type NatRule } from '@/hooks/useNatRules'
+import { useNatRules, useCreateNatRule, useCreateNatRuleAdmin, useDeleteNatRule, useExtendExpiry, type NatRule } from '@/hooks/useNatRules'
 import { usePolicies } from '@/hooks/usePolicies'
 import { useToast } from '@/hooks/use-toast'
 import { getTokenPayload } from '@/lib/api'
@@ -78,6 +78,8 @@ export default function NatRulesPage() {
   const deleteMutation = useDeleteNatRule()
   const { toast } = useToast()
 
+  const extendMutation = useExtendExpiry()
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedHostId, setSelectedHostId] = useState('')
   const [protocol, setProtocol] = useState('')
@@ -87,6 +89,8 @@ export default function NatRulesPage() {
   const [expiresAt, setExpiresAt] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'ALL' | NatRule['status']>('ACTIVE')
+  const [extendRuleId, setExtendRuleId] = useState<number | null>(null)
+  const [extendExpiry, setExtendExpiry] = useState('')
 
   const selectedPolicy = policies.find((p) => p.host.id === Number(selectedHostId))
 
@@ -153,6 +157,23 @@ export default function NatRulesPage() {
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         'Failed to create rule'
       toast({ title: 'Creation failed', description: msg, variant: 'destructive' })
+    }
+  }
+
+  async function handleExtend(id: number) {
+    try {
+      await extendMutation.mutateAsync({
+        id,
+        expiresAt: extendExpiry ? new Date(extendExpiry).toISOString() : null,
+      })
+      setExtendRuleId(null)
+      setExtendExpiry('')
+      toast({ title: 'Expiry updated' })
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        'Failed to update expiry'
+      toast({ title: 'Update failed', description: msg, variant: 'destructive' })
     }
   }
 
@@ -416,8 +437,24 @@ export default function NatRulesPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {rule.status !== 'DELETED' &&
-                      (deleteConfirmId === rule.id ? (
+                    {rule.status !== 'DELETED' && (
+                      extendRuleId === rule.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Input
+                            type="datetime-local"
+                            value={extendExpiry}
+                            onChange={(e) => setExtendExpiry(e.target.value)}
+                            min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                            className="h-7 text-xs font-mono w-[170px]"
+                          />
+                          <Button size="sm" variant="default" disabled={extendMutation.isPending} onClick={() => handleExtend(rule.id)}>
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setExtendRuleId(null); setExtendExpiry('') }}>
+                            ✕
+                          </Button>
+                        </span>
+                      ) : deleteConfirmId === rule.id ? (
                         <span className="inline-flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">Delete?</span>
                           <Button
@@ -437,15 +474,30 @@ export default function NatRulesPage() {
                           </Button>
                         </span>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteConfirmId(rule.id)}
-                        >
-                          Delete
-                        </Button>
-                      ))}
+                        <span className="inline-flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-primary text-xs"
+                            onClick={() => {
+                              setExtendRuleId(rule.id)
+                              setExtendExpiry(rule.expiresAt ? new Date(rule.expiresAt).toISOString().slice(0, 16) : '')
+                              setDeleteConfirmId(null)
+                            }}
+                          >
+                            Extend
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => { setDeleteConfirmId(rule.id); setExtendRuleId(null) }}
+                          >
+                            Delete
+                          </Button>
+                        </span>
+                      )
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

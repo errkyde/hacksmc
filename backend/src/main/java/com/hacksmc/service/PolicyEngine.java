@@ -3,6 +3,7 @@ package com.hacksmc.service;
 import com.hacksmc.entity.NatRuleStatus;
 import com.hacksmc.entity.Policy;
 import com.hacksmc.exception.PolicyViolationException;
+import com.hacksmc.repository.BlockedPortRangeRepository;
 import com.hacksmc.repository.NatRuleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.util.List;
 public class PolicyEngine {
 
     private final NatRuleRepository natRuleRepository;
+    private final BlockedPortRangeRepository blockedPortRangeRepository;
 
     /**
      * Validates that a new NAT rule is allowed by the user's policy for this host.
@@ -49,6 +51,12 @@ public class PolicyEngine {
                     "Port range " + portStart + "-" + portEnd + " outside allowed range ["
                     + policy.getPortRangeMin() + "-" + policy.getPortRangeMax()
                     + "] for host: " + hostName);
+        }
+
+        // Check blocked port ranges (admin bypass — this is only called for regular users)
+        if (blockedPortRangeRepository.existsByPortRangeOverlap(portStart, portEnd)) {
+            throw new PolicyViolationException(
+                    "Port range " + portStart + "-" + portEnd + " is blocked by administrator policy");
         }
 
         // Check active rule count per user per host

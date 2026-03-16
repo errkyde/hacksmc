@@ -1,6 +1,7 @@
 package com.hacksmc.exception;
 
 import com.hacksmc.entity.ErrorLog;
+import com.hacksmc.exception.MaintenanceException;
 import com.hacksmc.repository.ErrorLogRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -56,6 +57,11 @@ public class GlobalExceptionHandler {
                 "pfSense nicht erreichbar: " + ex.getMessage());
         persist(req, HttpStatus.BAD_GATEWAY.value(), ex);
         return pd;
+    }
+
+    @ExceptionHandler(MaintenanceException.class)
+    public ProblemDetail handleMaintenance(MaintenanceException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(ResponseStatusException.class)

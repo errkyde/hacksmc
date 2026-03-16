@@ -65,3 +65,14 @@ export function useDeleteNatRule() {
     },
   })
 }
+
+export function useExtendExpiry() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, expiresAt }: { id: number; expiresAt: string | null }) =>
+      api.patch(`/api/nat/rules/${id}/expiry`, { expiresAt }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nat-rules'] })
+    },
+  })
+}
