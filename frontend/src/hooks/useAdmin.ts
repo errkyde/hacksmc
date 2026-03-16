@@ -354,6 +354,9 @@ export interface SystemSettingsDto {
   siteMaintenance: boolean
   discordWebhookUrl: string | null
   discordEnabled: boolean
+  discordNotifyCreate: boolean
+  discordNotifyDelete: boolean
+  discordNotifyExpire: boolean
   updatedBy: string | null
   updatedAt: string | null
 }

@@ -1308,41 +1308,47 @@ function NotificationSection({ userId }: { userId: number }) {
             <p className="text-xs text-muted-foreground">Lädt…</p>
           ) : (
             <>
-              <div className="flex items-center gap-3">
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="E-Mail-Adresse"
-                  className="h-8 text-xs flex-1"
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                  <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} className="accent-primary" />
-                  E-Mail aktiv
-                </label>
-              </div>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={notifyOnCreate} onChange={(e) => setNotifyOnCreate(e.target.checked)} className="accent-primary" />
-                  Bei Erstellen
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={notifyOnDelete} onChange={(e) => setNotifyOnDelete(e.target.checked)} className="accent-primary" />
-                  Bei Löschen
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={notifyOnExpire} onChange={(e) => setNotifyOnExpire(e.target.checked)} className="accent-primary" />
-                  Bei Ablauf
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={notifyScope === 'ALL'}
-                    onChange={(e) => setNotifyScope(e.target.checked ? 'ALL' : 'OWN')}
-                    className="accent-primary"
+              <div className="space-y-2">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">E-Mail</p>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="E-Mail-Adresse"
+                    className="h-8 text-xs flex-1"
                   />
-                  Alle Regeln (nicht nur eigene)
-                </label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input type="checkbox" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.target.checked)} className="accent-primary" />
+                    aktiv
+                  </label>
+                </div>
+                <div className={cn('flex flex-wrap gap-3 text-xs', !emailEnabled && 'opacity-50 pointer-events-none')}>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={notifyOnCreate} onChange={(e) => setNotifyOnCreate(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
+                    Regel erstellt
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={notifyOnDelete} onChange={(e) => setNotifyOnDelete(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
+                    Regel gelöscht
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={notifyOnExpire} onChange={(e) => setNotifyOnExpire(e.target.checked)} className="accent-primary" disabled={!emailEnabled} />
+                    Regel abgelaufen
+                  </label>
+                </div>
+                <div className={cn('flex flex-wrap gap-3 text-xs', !emailEnabled && 'opacity-50 pointer-events-none')}>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifyScope === 'ALL'}
+                      onChange={(e) => setNotifyScope(e.target.checked ? 'ALL' : 'OWN')}
+                      className="accent-primary"
+                      disabled={!emailEnabled}
+                    />
+                    Alle Regeln (nicht nur eigene)
+                  </label>
+                </div>
               </div>
               <Button type="submit" size="sm" variant="outline" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? 'Wird gespeichert…' : 'Speichern'}
@@ -2446,7 +2452,7 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.3.0</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.3.1</span>
       </div>
     </div>
   )
@@ -2466,6 +2472,9 @@ function EinstellungenTab() {
   const [siteMaintenance, setSiteMaintenance] = useState(false)
   const [discordUrl, setDiscordUrl] = useState('')
   const [discordEnabled, setDiscordEnabled] = useState(false)
+  const [discordNotifyCreate, setDiscordNotifyCreate] = useState(true)
+  const [discordNotifyDelete, setDiscordNotifyDelete] = useState(true)
+  const [discordNotifyExpire, setDiscordNotifyExpire] = useState(true)
   const [settingsSaved, setSettingsSaved] = useState(false)
 
   const [rangeStart, setRangeStart] = useState('')
@@ -2479,6 +2488,9 @@ function EinstellungenTab() {
       setSiteMaintenance(settings.siteMaintenance)
       setDiscordUrl(settings.discordWebhookUrl ?? '')
       setDiscordEnabled(settings.discordEnabled)
+      setDiscordNotifyCreate(settings.discordNotifyCreate)
+      setDiscordNotifyDelete(settings.discordNotifyDelete)
+      setDiscordNotifyExpire(settings.discordNotifyExpire)
     }
   }, [settings])
 
@@ -2490,6 +2502,9 @@ function EinstellungenTab() {
         siteMaintenance,
         discordWebhookUrl: discordUrl.trim() || null,
         discordEnabled,
+        discordNotifyCreate,
+        discordNotifyDelete,
+        discordNotifyExpire,
       } as SystemSettingsDto)
       setSettingsSaved(true)
       setTimeout(() => setSettingsSaved(false), 2000)
@@ -2588,17 +2603,20 @@ function EinstellungenTab() {
                 </label>
               </div>
 
-              <div className="rounded-lg border bg-card p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
+              <div className="rounded-lg border bg-card p-4 space-y-4">
+                <div className="flex items-center gap-2">
                   <h4 className="text-sm font-medium">Discord Webhook</h4>
                 </div>
-                <Input
-                  type="url"
-                  value={discordUrl}
-                  onChange={(e) => setDiscordUrl(e.target.value)}
-                  placeholder="https://discord.com/api/webhooks/..."
-                  className="font-mono text-xs"
-                />
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Webhook-URL</Label>
+                  <Input
+                    type="url"
+                    value={discordUrl}
+                    onChange={(e) => setDiscordUrl(e.target.value)}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="font-mono text-xs"
+                  />
+                </div>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
@@ -2608,6 +2626,44 @@ function EinstellungenTab() {
                   />
                   Discord-Benachrichtigungen aktivieren
                 </label>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Discord — welche Ereignisse posten
+                  </p>
+                  <div className={cn('flex flex-wrap gap-4', !discordEnabled && 'opacity-50 pointer-events-none')}>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discordNotifyCreate}
+                        onChange={(e) => setDiscordNotifyCreate(e.target.checked)}
+                        className="accent-primary"
+                        disabled={!discordEnabled}
+                      />
+                      Regel erstellt
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discordNotifyDelete}
+                        onChange={(e) => setDiscordNotifyDelete(e.target.checked)}
+                        className="accent-primary"
+                        disabled={!discordEnabled}
+                      />
+                      Regel gelöscht
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discordNotifyExpire}
+                        onChange={(e) => setDiscordNotifyExpire(e.target.checked)}
+                        className="accent-primary"
+                        disabled={!discordEnabled}
+                      />
+                      Regel abgelaufen
+                    </label>
+                  </div>
+                </div>
                 {settings?.updatedBy && (
                   <p className="text-xs text-muted-foreground">
                     Zuletzt geändert von <span className="font-mono">{settings.updatedBy}</span>
