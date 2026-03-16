@@ -6,6 +6,7 @@ import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NatRuleStatus;
 import com.hacksmc.entity.Policy;
 import com.hacksmc.entity.User;
+import com.hacksmc.repository.HostRepository;
 import com.hacksmc.repository.NatRuleRepository;
 import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.repository.UserRepository;
@@ -28,6 +29,7 @@ public class NatRuleService {
     private final NatRuleRepository natRuleRepository;
     private final PolicyRepository policyRepository;
     private final UserRepository userRepository;
+    private final HostRepository hostRepository;
     private final PolicyEngine policyEngine;
     private final PfSenseApiClient pfSenseApiClient;
     private final AuditLogService auditLogService;
@@ -83,21 +85,23 @@ public class NatRuleService {
         Host host = policy.getHost();
 
         // Policy check (throws PolicyViolationException -> 403)
-        policyEngine.validateRule(policy, request.protocol(), request.port(), user.getId());
+        policyEngine.validateRule(policy, request.protocol(), request.portStart(), request.portEnd(), user.getId());
 
         // Persist as PENDING before calling pfSense
         NatRule rule = new NatRule();
         rule.setHost(host);
         rule.setUser(user);
         rule.setProtocol(request.protocol().toUpperCase());
-        rule.setPort(request.port());
+        rule.setPortStart(request.portStart());
+        rule.setPortEnd(request.portEnd());
         rule.setDescription(request.description());
+        rule.setExpiresAt(request.expiresAt());
         rule.setStatus(NatRuleStatus.PENDING);
         natRuleRepository.save(rule);
 
         // Call pfSense — embeds [hsmc:{id}] tag in description for stable identification
         String pfSenseId = pfSenseApiClient.createNatRule(
-                host.getIpAddress(), request.protocol(), request.port(),
+                host.getIpAddress(), request.protocol(), request.portStart(), request.portEnd(),
                 host.getName(), request.description(), rule.getId()
         );
 
@@ -105,7 +109,47 @@ public class NatRuleService {
         rule.setStatus(NatRuleStatus.ACTIVE);
         natRuleRepository.save(rule);
         auditLogService.log(username, "NAT_RULE_CREATED", host.getName(),
-                request.protocol().toUpperCase() + ":" + request.port());
+                request.protocol().toUpperCase() + ":" + portRangeStr(request.portStart(), request.portEnd()));
+        return rule;
+    }
+
+    @Transactional
+    public NatRule createRuleAsAdmin(String adminUsername, CreateNatRuleRequest request) {
+        User admin = getUser(adminUsername);
+
+        Host host = hostRepository.findById(request.hostId())
+                .orElseThrow(() -> new NoSuchElementException("Host not found: " + request.hostId()));
+
+        // Only check overlap — no policy restrictions for admin
+        boolean rangeInUse = natRuleRepository.existsByPortRangeOverlapAndStatusIn(
+                request.portStart(), request.portEnd(),
+                List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE));
+        if (rangeInUse) {
+            throw new com.hacksmc.exception.PolicyViolationException(
+                    "Port range " + request.portStart() + "-" + request.portEnd() + " overlaps with an existing rule");
+        }
+
+        NatRule rule = new NatRule();
+        rule.setHost(host);
+        rule.setUser(admin);
+        rule.setProtocol(request.protocol().toUpperCase());
+        rule.setPortStart(request.portStart());
+        rule.setPortEnd(request.portEnd());
+        rule.setDescription(request.description());
+        rule.setExpiresAt(request.expiresAt());
+        rule.setStatus(NatRuleStatus.PENDING);
+        natRuleRepository.save(rule);
+
+        String pfSenseId = pfSenseApiClient.createNatRule(
+                host.getIpAddress(), request.protocol(), request.portStart(), request.portEnd(),
+                host.getName(), request.description(), rule.getId()
+        );
+
+        rule.setPfSenseRuleId(pfSenseId);
+        rule.setStatus(NatRuleStatus.ACTIVE);
+        natRuleRepository.save(rule);
+        auditLogService.log(adminUsername, "NAT_RULE_CREATED_ADMIN", host.getName(),
+                request.protocol().toUpperCase() + ":" + portRangeStr(request.portStart(), request.portEnd()));
         return rule;
     }
 
@@ -128,7 +172,11 @@ public class NatRuleService {
         rule.setDeletedAt(Instant.now());
         natRuleRepository.save(rule);
         auditLogService.log(username, "NAT_RULE_DELETED", rule.getHost().getName(),
-                rule.getProtocol() + ":" + rule.getPort());
+                rule.getProtocol() + ":" + portRangeStr(rule.getPortStart(), rule.getPortEnd()));
+    }
+
+    private static String portRangeStr(int portStart, int portEnd) {
+        return portStart == portEnd ? String.valueOf(portStart) : portStart + "-" + portEnd;
     }
 
     private User getUser(String username) {

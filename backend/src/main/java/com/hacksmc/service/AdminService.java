@@ -37,6 +37,47 @@ public class AdminService {
 
     // ── NAT Rules ──────────────────────────────────────────────────────────────
 
+    public void deleteRuleAsAdmin(Long ruleId) {
+        NatRule rule = natRuleRepository.findById(ruleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rule not found"));
+        if (rule.getStatus() == NatRuleStatus.DELETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Rule already deleted");
+        }
+        String pfSenseRuleId = rule.getPfSenseRuleId();
+        if (pfSenseRuleId != null && !pfSenseRuleId.equals("null") && !pfSenseRuleId.isBlank()) {
+            pfSenseApiClient.deleteNatRule(pfSenseRuleId);
+        }
+        rule.setStatus(NatRuleStatus.DELETED);
+        rule.setDeletedAt(java.time.Instant.now());
+        natRuleRepository.save(rule);
+        auditLogService.log(currentAdmin(), "NAT_RULE_DELETED_ADMIN",
+                rule.getHost().getName(),
+                rule.getProtocol() + ":" + (rule.getPortStart() == rule.getPortEnd()
+                        ? rule.getPortStart()
+                        : rule.getPortStart() + "-" + rule.getPortEnd()));
+    }
+
+    public void deleteRulesAsAdmin(List<Long> ids) {
+        java.time.Instant now = java.time.Instant.now();
+        for (Long id : ids) {
+            natRuleRepository.findById(id).ifPresent(rule -> {
+                if (rule.getStatus() == NatRuleStatus.DELETED) return;
+                String pfSenseRuleId = rule.getPfSenseRuleId();
+                if (pfSenseRuleId != null && !pfSenseRuleId.equals("null") && !pfSenseRuleId.isBlank()) {
+                    try { pfSenseApiClient.deleteNatRule(pfSenseRuleId); } catch (Exception ignored) {}
+                }
+                rule.setStatus(NatRuleStatus.DELETED);
+                rule.setDeletedAt(now);
+                natRuleRepository.save(rule);
+                auditLogService.log(currentAdmin(), "NAT_RULE_DELETED_ADMIN",
+                        rule.getHost().getName(),
+                        rule.getProtocol() + ":" + (rule.getPortStart() == rule.getPortEnd()
+                                ? rule.getPortStart()
+                                : rule.getPortStart() + "-" + rule.getPortEnd()));
+            });
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<AdminNatRuleResponse> getAllNatRules() {
         return natRuleRepository.findAllWithUserAndHost().stream()
@@ -46,12 +87,14 @@ public class AdminService {
                         r.getHost().getName(),
                         r.getHost().getIpAddress(),
                         r.getProtocol(),
-                        r.getPort(),
+                        r.getPortStart(),
+                        r.getPortEnd(),
                         r.getDescription(),
                         r.getPfSenseRuleId(),
                         r.getStatus().name(),
                         r.getCreatedAt(),
-                        r.getDeletedAt()
+                        r.getDeletedAt(),
+                        r.getExpiresAt()
                 ))
                 .toList();
     }
@@ -244,12 +287,14 @@ public class AdminService {
                         r.getHost().getName(),
                         r.getHost().getIpAddress(),
                         r.getProtocol(),
-                        r.getPort(),
+                        r.getPortStart(),
+                        r.getPortEnd(),
                         r.getDescription(),
                         r.getPfSenseRuleId(),
                         r.getStatus().name(),
                         r.getCreatedAt(),
-                        r.getDeletedAt()
+                        r.getDeletedAt(),
+                        r.getExpiresAt()
                 ))
                 .toList();
 

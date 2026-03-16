@@ -95,7 +95,7 @@ export const handlers = [
     const user = db.users.find(u => u.username === username)
     if (!user) return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json() as { hostId: number; protocol: string; port: number; description?: string }
+    const body = await request.json() as { hostId: number; protocol: string; portStart: number; portEnd: number; description?: string }
     const host = db.hosts.find(h => h.id === body.hostId && h.userId === user.id)
     if (!host) return HttpResponse.json({ detail: 'Host not found or not owned by user' }, { status: 404 })
 
@@ -108,9 +108,9 @@ export const handlers = [
           { status: 403 }
         )
       }
-      if (body.port < policy.portRangeMin || body.port > policy.portRangeMax) {
+      if (body.portStart < policy.portRangeMin || body.portEnd > policy.portRangeMax) {
         return HttpResponse.json(
-          { detail: `Port ${body.port} outside allowed range [${policy.portRangeMin}-${policy.portRangeMax}]` },
+          { detail: `Port range ${body.portStart}-${body.portEnd} outside allowed range [${policy.portRangeMin}-${policy.portRangeMax}]` },
           { status: 403 }
         )
       }
@@ -123,13 +123,15 @@ export const handlers = [
       }
     }
 
-    // Global port conflict check — port must be free across all users
-    const portInUse = db.natRules.some(
-      r => r.port === body.port && (r.status === 'ACTIVE' || r.status === 'PENDING')
+    // Global port-range overlap check — range must be free across all users
+    const portEnd = body.portEnd ?? body.portStart
+    const rangeInUse = db.natRules.some(
+      r => (r.status === 'ACTIVE' || r.status === 'PENDING') &&
+           r.portStart <= portEnd && r.portEnd >= body.portStart
     )
-    if (portInUse) {
+    if (rangeInUse) {
       return HttpResponse.json(
-        { detail: `Port ${body.port} is already in use by another rule` },
+        { detail: `Port range ${body.portStart}-${portEnd} overlaps with an existing rule` },
         { status: 403 }
       )
     }
@@ -139,7 +141,8 @@ export const handlers = [
       userId: user.id,
       host: { id: host.id, name: host.name, ipAddress: host.ipAddress },
       protocol: body.protocol.toUpperCase(),
-      port: body.port,
+      portStart: body.portStart,
+      portEnd: portEnd,
       description: body.description ?? null,
       pfSenseRuleId: `pf-rule-mock-${db.nextId}`,
       status: 'ACTIVE',

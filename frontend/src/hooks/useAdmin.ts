@@ -193,18 +193,40 @@ export interface AdminNatRule {
   hostName: string
   hostIp: string
   protocol: string
-  port: number
+  portStart: number
+  portEnd: number
   description: string | null
   pfSenseRuleId: string | null
   status: 'PENDING' | 'ACTIVE' | 'DELETED'
   createdAt: string
   deletedAt: string | null
+  expiresAt: string | null
 }
 
 export function useAdminRules() {
   return useQuery<AdminNatRule[]>({
     queryKey: ['admin', 'rules'],
     queryFn: () => api.get('/api/admin/rules').then((r) => r.data),
+  })
+}
+
+export function useAdminDeleteRule() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/admin/rules/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'rules'] })
+    },
+  })
+}
+
+export function useAdminBulkDeleteRules() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: number[]) => api.delete('/api/admin/rules/bulk', { data: ids }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'rules'] })
+    },
   })
 }
 

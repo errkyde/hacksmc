@@ -18,6 +18,8 @@ import {
   useAdminHostStatus,
   useUserOverview,
   useAdminRules,
+  useAdminDeleteRule,
+  useAdminBulkDeleteRules,
   useAuditLog,
   usePfSenseStatus,
   useAdminErrors,
@@ -210,31 +212,124 @@ function PolicyFields({
 
 function NatRulesTab() {
   const { data: rules = [], isLoading } = useAdminRules()
-  const [statusFilter, setStatusFilter] = useState<'ALL' | AdminNatRule['status']>('ALL')
+  const deleteMutation = useAdminDeleteRule()
+  const bulkDeleteMutation = useAdminBulkDeleteRules()
+  const { toast } = useToast()
 
-  const filtered = statusFilter === 'ALL' ? rules : rules.filter((r) => r.status === statusFilter)
+  const [statusFilter, setStatusFilter] = useState<'ALL' | AdminNatRule['status']>('ALL')
+  const [protocolFilter, setProtocolFilter] = useState('ALL')
+  const [portSearch, setPortSearch] = useState('')
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [bulkConfirm, setBulkConfirm] = useState(false)
+
+  const uniqueProtocols = [...new Set(rules.map((r) => r.protocol))].sort()
+
+  const filtered = rules.filter((r) => {
+    if (statusFilter !== 'ALL' && r.status !== statusFilter) return false
+    if (protocolFilter !== 'ALL' && r.protocol !== protocolFilter) return false
+    if (portSearch.trim()) {
+      const q = portSearch.trim()
+      const portStr = r.portStart === r.portEnd ? String(r.portStart) : `${r.portStart}–${r.portEnd}`
+      if (!portStr.includes(q) && !String(r.portStart).includes(q) && !String(r.portEnd).includes(q)) return false
+    }
+    return true
+  })
+
+  const deletableFiltered = filtered.filter((r) => r.status !== 'DELETED')
+  const allSelected = deletableFiltered.length > 0 && deletableFiltered.every((r) => selected.has(r.id))
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected((prev) => { const s = new Set(prev); deletableFiltered.forEach((r) => s.delete(r.id)); return s })
+    } else {
+      setSelected((prev) => { const s = new Set(prev); deletableFiltered.forEach((r) => s.add(r.id)); return s })
+    }
+  }
+
+  function toggleOne(id: number) {
+    setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await deleteMutation.mutateAsync(id)
+      setDeleteConfirmId(null)
+      setSelected((prev) => { const s = new Set(prev); s.delete(id); return s })
+      toast({ title: 'Regel gelöscht' })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Löschen fehlgeschlagen'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
+      setDeleteConfirmId(null)
+    }
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selected]
+    try {
+      await bulkDeleteMutation.mutateAsync(ids)
+      setSelected(new Set())
+      setBulkConfirm(false)
+      toast({ title: `${ids.length} Regel${ids.length !== 1 ? 'n' : ''} gelöscht` })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Bulk-Löschen fehlgeschlagen'
+      toast({ title: 'Fehler', description: msg, variant: 'destructive' })
+      setBulkConfirm(false)
+    }
+  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">NAT-Regeln</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isLoading ? '…' : `${filtered.length} Regel${filtered.length !== 1 ? 'n' : ''}`}
-            {statusFilter !== 'ALL' && ` (${statusFilter})`}
+            {isLoading ? '…' : `${filtered.length} von ${rules.length} Regel${rules.length !== 1 ? 'n' : ''}`}
           </p>
         </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Alle Status</SelectItem>
-            <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-            <SelectItem value="PENDING">PENDING</SelectItem>
-            <SelectItem value="DELETED">DELETED</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          {selected.size > 0 && (
+            bulkConfirm ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{selected.size} löschen?</span>
+                <Button size="sm" variant="destructive" disabled={bulkDeleteMutation.isPending} onClick={handleBulkDelete}>Ja</Button>
+                <Button size="sm" variant="ghost" onClick={() => setBulkConfirm(false)}>Nein</Button>
+              </span>
+            ) : (
+              <Button size="sm" variant="destructive" onClick={() => setBulkConfirm(true)}>
+                {selected.size} löschen
+              </Button>
+            )
+          )}
+          <Input
+            placeholder="Port suchen…"
+            value={portSearch}
+            onChange={(e) => setPortSearch(e.target.value)}
+            className="w-[130px] h-9 font-mono text-sm"
+          />
+          <Select value={protocolFilter} onValueChange={setProtocolFilter}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Alle Protokolle</SelectItem>
+              {uniqueProtocols.map((p) => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Alle Status</SelectItem>
+              <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+              <SelectItem value="PENDING">PENDING</SelectItem>
+              <SelectItem value="DELETED">DELETED</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden">
@@ -248,18 +343,39 @@ function NatRulesTab() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="accent-primary cursor-pointer"
+                    title="Alle auswählen"
+                  />
+                </TableHead>
                 <TableHead>Benutzer</TableHead>
                 <TableHead>Host</TableHead>
                 <TableHead>IP</TableHead>
                 <TableHead>Protokoll</TableHead>
-                <TableHead>Port</TableHead>
+                <TableHead>Port(s)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Erstellt</TableHead>
+                <TableHead>Läuft ab</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((rule) => (
-                <TableRow key={rule.id}>
+                <TableRow key={rule.id} className={rule.status === 'DELETED' ? 'opacity-40' : ''}>
+                  <TableCell>
+                    {rule.status !== 'DELETED' && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(rule.id)}
+                        onChange={() => toggleOne(rule.id)}
+                        className="accent-primary cursor-pointer"
+                      />
+                    )}
+                  </TableCell>
                   <TableCell className="font-mono text-sm font-medium">
                     {rule.username}
                   </TableCell>
@@ -279,14 +395,38 @@ function NatRulesTab() {
                       {rule.protocol}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {rule.port}
+                  <TableCell className="font-mono text-sm font-semibold text-primary">
+                    {rule.portStart === rule.portEnd ? rule.portStart : `${rule.portStart}–${rule.portEnd}`}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={rule.status} />
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                     {new Date(rule.createdAt).toLocaleString('de-DE')}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono whitespace-nowrap">
+                    {rule.expiresAt ? (
+                      <span className={cn(new Date(rule.expiresAt) < new Date() ? 'text-muted-foreground line-through' : 'text-amber-400')}>
+                        {new Date(rule.expiresAt).toLocaleString('de-DE')}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {rule.status !== 'DELETED' && (
+                      deleteConfirmId === rule.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Löschen?</span>
+                          <Button size="sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => handleDelete(rule.id)}>Ja</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(null)}>Nein</Button>
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirmId(rule.id)}>
+                          Löschen
+                        </Button>
+                      )
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -307,8 +447,11 @@ const ACTION_STYLES: Record<string, string> = {
   USER_ENABLED:      'text-emerald-400',
   USER_DISABLED:     'text-orange-400',
   PASSWORD_RESET:    'text-yellow-400',
-  NAT_RULE_CREATED:  'text-cyan-400',
-  NAT_RULE_DELETED:  'text-rose-400',
+  NAT_RULE_CREATED:       'text-cyan-400',
+  NAT_RULE_CREATED_ADMIN: 'text-cyan-300',
+  NAT_RULE_DELETED:       'text-rose-400',
+  NAT_RULE_DELETED_ADMIN: 'text-rose-300',
+  NAT_RULE_EXPIRED:       'text-orange-400',
 }
 
 function AuditLogTab() {
@@ -1329,7 +1472,7 @@ function UserOverviewDialog({ username, userId, open, onOpenChange }: {
                         <TableRow key={rule.id}>
                           <TableCell className="py-2 font-mono text-xs text-muted-foreground">{rule.hostName}</TableCell>
                           <TableCell className="py-2 font-mono text-xs">
-                            {rule.protocol}:{rule.port}
+                            {rule.protocol}:{rule.portStart === rule.portEnd ? rule.portStart : `${rule.portStart}–${rule.portEnd}`}
                           </TableCell>
                           <TableCell className="py-2 text-xs text-muted-foreground max-w-[120px] truncate">
                             {rule.description ?? <span className="italic">—</span>}
@@ -2141,7 +2284,7 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.0.0</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.2.0</span>
       </div>
     </div>
   )

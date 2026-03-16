@@ -1,0 +1,1 @@
+ALTER TABLE nat_rules ADD COLUMN expires_at TIMESTAMPTZ;

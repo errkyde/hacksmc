@@ -70,11 +70,12 @@ public class PfSenseApiClient {
      * Embeds [hsmc:{dbRuleId}] in the description for reliable identification.
      * Stores the dbRuleId as pfSenseRuleId in the DB.
      */
-    public String createNatRule(String destIp, String protocol, int port, String hostname, String userDescription, Long dbRuleId) {
+    public String createNatRule(String destIp, String protocol, int portStart, int portEnd, String hostname, String userDescription, Long dbRuleId) {
         String tag = TAG_PREFIX + dbRuleId + TAG_SUFFIX;
         String descr = "<" + hostname + "> : " + tag + " - " + userDescription;
+        String portStr = (portStart == portEnd) ? String.valueOf(portStart) : portStart + ":" + portEnd;
 
-        log.info("Creating pfSense NAT rule: {}:{}/{} descr={}", destIp, port, protocol, descr);
+        log.info("Creating pfSense NAT rule: {}:{}/{} descr={}", destIp, portStr, protocol, descr);
 
         Map<String, Object> body = new HashMap<>();
         body.put("interface", "wan");
@@ -82,9 +83,9 @@ public class PfSenseApiClient {
         body.put("protocol", protocol.toLowerCase());
         body.put("source", "any");
         body.put("destination", "any");
-        body.put("destination_port", String.valueOf(port));
+        body.put("destination_port", portStr);
         body.put("target", destIp);
-        body.put("local_port", String.valueOf(port));
+        body.put("local_port", portStr);
         body.put("descr", descr);
         body.put("disabled", false);
         body.put("associated_rule_id", "new");

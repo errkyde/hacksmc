@@ -14,3 +14,11 @@ export function useHosts() {
     queryFn: () => api.get('/api/hosts').then((r) => r.data),
   })
 }
+
+export function useAdminHosts(options?: { enabled?: boolean }) {
+  return useQuery<Host[]>({
+    queryKey: ['admin-hosts'],
+    queryFn: () => api.get('/api/admin/hosts').then((r) => r.data),
+    enabled: options?.enabled ?? true,
+  })
+}

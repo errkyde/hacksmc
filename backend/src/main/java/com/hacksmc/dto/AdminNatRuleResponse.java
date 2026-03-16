@@ -8,10 +8,12 @@ public record AdminNatRuleResponse(
     String hostName,
     String hostIp,
     String protocol,
-    int port,
+    int portStart,
+    int portEnd,
     String description,
     String pfSenseRuleId,
     String status,
     Instant createdAt,
-    Instant deletedAt
+    Instant deletedAt,
+    Instant expiresAt
 ) {}

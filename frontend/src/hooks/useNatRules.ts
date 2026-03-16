@@ -5,19 +5,23 @@ export interface NatRule {
   id: number
   host: { id: number; name: string; ipAddress: string }
   protocol: string
-  port: number
+  portStart: number
+  portEnd: number
   description: string | null
   pfSenseRuleId: string | null
   status: 'PENDING' | 'ACTIVE' | 'DELETED'
   createdAt: string
   deletedAt: string | null
+  expiresAt: string | null
 }
 
 export interface CreateNatRuleRequest {
   hostId: number
   protocol: string
-  port: number
+  portStart: number
+  portEnd: number
   description?: string
+  expiresAt?: string | null
 }
 
 export function useNatRules() {
@@ -35,6 +39,18 @@ export function useCreateNatRule() {
       api.post('/api/nat/rules', data).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nat-rules'] })
+    },
+  })
+}
+
+export function useCreateNatRuleAdmin() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateNatRuleRequest) =>
+      api.post('/api/nat/rules/admin', data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nat-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-nat-rules'] })
     },
   })
 }

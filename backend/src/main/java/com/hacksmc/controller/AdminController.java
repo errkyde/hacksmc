@@ -123,6 +123,18 @@ public class AdminController {
         return adminService.getAllNatRules();
     }
 
+    @DeleteMapping("/rules/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRule(@PathVariable Long id) {
+        adminService.deleteRuleAsAdmin(id);
+    }
+
+    @DeleteMapping("/rules/bulk")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteRulesBulk(@RequestBody List<Long> ids) {
+        adminService.deleteRulesAsAdmin(ids);
+    }
+
     // ── Audit Log ──────────────────────────────────────────────────────────────
 
     @GetMapping("/audit-log")

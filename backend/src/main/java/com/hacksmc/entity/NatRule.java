@@ -28,7 +28,10 @@ public class NatRule {
     private String protocol;
 
     @Column(nullable = false)
-    private int port;
+    private int portStart;
+
+    @Column(nullable = false)
+    private int portEnd;
 
     @Column
     private String description;
@@ -50,6 +53,10 @@ public class NatRule {
 
     @Column
     private Instant deletedAt;
+
+    /** Optional: rule is auto-deleted by the expiry scheduler at this timestamp */
+    @Column
+    private Instant expiresAt;
 
     @PrePersist
     void prePersist() {

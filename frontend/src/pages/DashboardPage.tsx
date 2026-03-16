@@ -174,7 +174,7 @@ export default function DashboardPage() {
                             <div key={r.id} className="flex items-center justify-between text-xs">
                               <span className="flex items-center gap-1.5 text-muted-foreground">
                                 <Wifi className="h-3 w-3 text-emerald-500" />
-                                <span className="font-mono">{r.protocol}:{r.port}</span>
+                                <span className="font-mono">{r.protocol}:{r.portStart === r.portEnd ? r.portStart : `${r.portStart}–${r.portEnd}`}</span>
                               </span>
                               {r.description && (
                                 <span className="text-muted-foreground/70 truncate max-w-[120px]">{r.description}</span>

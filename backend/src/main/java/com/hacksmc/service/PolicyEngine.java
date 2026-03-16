@@ -18,25 +18,35 @@ public class PolicyEngine {
 
     /**
      * Validates that a new NAT rule is allowed by the user's policy for this host.
+     * Supports port ranges and TCP/UDP combined protocol.
      * Throws PolicyViolationException (-> 403) if any check fails.
      */
-    public void validateRule(Policy policy, String protocol, int port, Long userId) {
+    public void validateRule(Policy policy, String protocol, int portStart, int portEnd, Long userId) {
         String hostName = policy.getHost().getName();
 
-        // Check protocol
-        boolean protocolAllowed = Arrays.stream(policy.getAllowedProtocols().split(","))
+        // Check protocol — "TCP/UDP" requires both TCP and UDP to be individually allowed
+        List<String> allowed = Arrays.stream(policy.getAllowedProtocols().split(","))
                 .map(String::trim)
-                .anyMatch(p -> p.equalsIgnoreCase(protocol));
+                .map(String::toUpperCase)
+                .toList();
+
+        boolean protocolAllowed;
+        if ("TCP/UDP".equalsIgnoreCase(protocol)) {
+            protocolAllowed = allowed.contains("TCP") && allowed.contains("UDP");
+        } else {
+            protocolAllowed = allowed.stream().anyMatch(p -> p.equalsIgnoreCase(protocol));
+        }
+
         if (!protocolAllowed) {
             throw new PolicyViolationException(
                     "Protocol '" + protocol + "' not allowed for host: " + hostName
                     + ". Allowed: " + policy.getAllowedProtocols());
         }
 
-        // Check port range
-        if (port < policy.getPortRangeMin() || port > policy.getPortRangeMax()) {
+        // Check port range — both bounds must fit within policy
+        if (portStart < policy.getPortRangeMin() || portEnd > policy.getPortRangeMax()) {
             throw new PolicyViolationException(
-                    "Port " + port + " outside allowed range ["
+                    "Port range " + portStart + "-" + portEnd + " outside allowed range ["
                     + policy.getPortRangeMin() + "-" + policy.getPortRangeMax()
                     + "] for host: " + hostName);
         }
@@ -49,12 +59,12 @@ public class PolicyEngine {
                     "Max rule limit (" + policy.getMaxRules() + ") reached for host: " + hostName);
         }
 
-        // Global port conflict check
-        boolean portInUse = natRuleRepository.existsByPortAndStatusIn(
-                port, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE));
-        if (portInUse) {
+        // Global port-range conflict check
+        boolean rangeInUse = natRuleRepository.existsByPortRangeOverlapAndStatusIn(
+                portStart, portEnd, List.of(NatRuleStatus.PENDING, NatRuleStatus.ACTIVE));
+        if (rangeInUse) {
             throw new PolicyViolationException(
-                    "Port " + port + " is already in use by another rule");
+                    "Port range " + portStart + "-" + portEnd + " overlaps with an existing rule");
         }
     }
 }

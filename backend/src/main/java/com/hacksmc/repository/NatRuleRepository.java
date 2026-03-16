@@ -3,6 +3,7 @@ package com.hacksmc.repository;
 import com.hacksmc.entity.NatRule;
 import com.hacksmc.entity.NatRuleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import java.time.Instant;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
@@ -22,8 +23,17 @@ public interface NatRuleRepository extends JpaRepository<NatRule, Long> {
 
     List<NatRule> findByHostIdAndStatusIn(Long hostId, List<NatRuleStatus> statuses);
 
-    /** Globale Port-Belegungsprüfung — unabhängig von Nutzer oder Host */
-    boolean existsByPortAndStatusIn(int port, List<NatRuleStatus> statuses);
+    /** Global port-range overlap check — across all users and hosts */
+    @Query("SELECT CASE WHEN COUNT(r) > 0 THEN TRUE ELSE FALSE END " +
+           "FROM NatRule r " +
+           "WHERE r.status IN :statuses " +
+           "AND r.portStart <= :portEnd AND r.portEnd >= :portStart")
+    boolean existsByPortRangeOverlapAndStatusIn(
+        @Param("portStart") int portStart,
+        @Param("portEnd") int portEnd,
+        @Param("statuses") List<NatRuleStatus> statuses);
+
+    List<NatRule> findByExpiresAtBeforeAndStatusIn(Instant expiresAt, List<NatRuleStatus> statuses);
 
     @Query("SELECT r FROM NatRule r JOIN FETCH r.user JOIN FETCH r.host ORDER BY r.createdAt DESC")
     List<NatRule> findAllWithUserAndHost();

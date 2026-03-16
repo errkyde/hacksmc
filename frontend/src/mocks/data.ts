@@ -29,7 +29,8 @@ export interface MockNatRule {
   userId: number
   host: { id: number; name: string; ipAddress: string }
   protocol: string
-  port: number
+  portStart: number
+  portEnd: number
   description: string | null
   pfSenseRuleId: string | null
   status: 'PENDING' | 'ACTIVE' | 'DELETED'
@@ -69,16 +70,16 @@ export const db = {
 
   natRules: [
     // phil
-    { id: 1, userId: 2, host: { id: 1, name: 'minecraft-server', ipAddress: '192.168.10.50' }, protocol: 'TCP', port: 25565, description: 'Minecraft Java Edition', pfSenseRuleId: 'pf-rule-001', status: 'ACTIVE',  createdAt: '2026-02-22T10:00:00Z', deletedAt: null },
-    { id: 2, userId: 2, host: { id: 2, name: 'teamspeak-server', ipAddress: '192.168.10.51' }, protocol: 'UDP', port: 9987,  description: 'TeamSpeak voice',        pfSenseRuleId: 'pf-rule-002', status: 'ACTIVE',  createdAt: '2026-02-24T14:00:00Z', deletedAt: null },
+    { id: 1, userId: 2, host: { id: 1, name: 'minecraft-server', ipAddress: '192.168.10.50' }, protocol: 'TCP', portStart: 25565, portEnd: 25565, description: 'Minecraft Java Edition', pfSenseRuleId: 'pf-rule-001', status: 'ACTIVE',  createdAt: '2026-02-22T10:00:00Z', deletedAt: null },
+    { id: 2, userId: 2, host: { id: 2, name: 'teamspeak-server', ipAddress: '192.168.10.51' }, protocol: 'UDP', portStart: 9987,  portEnd: 9987,  description: 'TeamSpeak voice',        pfSenseRuleId: 'pf-rule-002', status: 'ACTIVE',  createdAt: '2026-02-24T14:00:00Z', deletedAt: null },
     // lisa
-    { id: 3, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', port: 80,    description: 'HTTP frontend',          pfSenseRuleId: 'pf-rule-003', status: 'ACTIVE',  createdAt: '2026-02-20T08:00:00Z', deletedAt: null },
-    { id: 4, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', port: 443,   description: 'HTTPS frontend',         pfSenseRuleId: 'pf-rule-004', status: 'ACTIVE',  createdAt: '2026-02-20T08:01:00Z', deletedAt: null },
-    { id: 5, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', port: 8080,  description: 'Dev proxy',              pfSenseRuleId: 'pf-rule-005', status: 'ACTIVE',  createdAt: '2026-02-23T11:00:00Z', deletedAt: null },
-    { id: 6, userId: 3, host: { id: 4, name: 'vpn-gateway',      ipAddress: '192.168.20.11' }, protocol: 'UDP', port: 51820, description: 'WireGuard',              pfSenseRuleId: 'pf-rule-006', status: 'ACTIVE',  createdAt: '2026-02-18T09:00:00Z', deletedAt: null },
+    { id: 3, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', portStart: 80,    portEnd: 80,    description: 'HTTP frontend',          pfSenseRuleId: 'pf-rule-003', status: 'ACTIVE',  createdAt: '2026-02-20T08:00:00Z', deletedAt: null },
+    { id: 4, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', portStart: 443,   portEnd: 443,   description: 'HTTPS frontend',         pfSenseRuleId: 'pf-rule-004', status: 'ACTIVE',  createdAt: '2026-02-20T08:01:00Z', deletedAt: null },
+    { id: 5, userId: 3, host: { id: 3, name: 'web-server',       ipAddress: '192.168.20.10' }, protocol: 'TCP', portStart: 8080,  portEnd: 8085,  description: 'Dev proxy',              pfSenseRuleId: 'pf-rule-005', status: 'ACTIVE',  createdAt: '2026-02-23T11:00:00Z', deletedAt: null },
+    { id: 6, userId: 3, host: { id: 4, name: 'vpn-gateway',      ipAddress: '192.168.20.11' }, protocol: 'UDP', portStart: 51820, portEnd: 51820, description: 'WireGuard',              pfSenseRuleId: 'pf-rule-006', status: 'ACTIVE',  createdAt: '2026-02-18T09:00:00Z', deletedAt: null },
     // felix
-    { id: 7, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'TCP', port: 3000,  description: 'React dev server',       pfSenseRuleId: 'pf-rule-007', status: 'ACTIVE',  createdAt: '2026-02-24T16:00:00Z', deletedAt: null },
-    { id: 8, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'TCP', port: 8000,  description: 'Django backend',         pfSenseRuleId: 'pf-rule-008', status: 'ACTIVE',  createdAt: '2026-02-23T15:00:00Z', deletedAt: null },
-    { id: 9, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'UDP', port: 5000,  description: 'Game server (test)',     pfSenseRuleId: null,          status: 'DELETED', createdAt: '2026-02-21T10:00:00Z', deletedAt: '2026-02-22T12:00:00Z' },
+    { id: 7, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'TCP', portStart: 3000,  portEnd: 3000,  description: 'React dev server',       pfSenseRuleId: 'pf-rule-007', status: 'ACTIVE',  createdAt: '2026-02-24T16:00:00Z', deletedAt: null },
+    { id: 8, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'TCP', portStart: 8000,  portEnd: 8000,  description: 'Django backend',         pfSenseRuleId: 'pf-rule-008', status: 'ACTIVE',  createdAt: '2026-02-23T15:00:00Z', deletedAt: null },
+    { id: 9, userId: 4, host: { id: 5, name: 'dev-server',       ipAddress: '192.168.30.5'  }, protocol: 'UDP', portStart: 5000,  portEnd: 5000,  description: 'Game server (test)',     pfSenseRuleId: null,          status: 'DELETED', createdAt: '2026-02-21T10:00:00Z', deletedAt: '2026-02-22T12:00:00Z' },
   ] as MockNatRule[],
 }

@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import Layout from '@/components/Layout'
-import { useHosts } from '@/hooks/useHosts'
-import { useNatRules, useCreateNatRule, useDeleteNatRule, type NatRule } from '@/hooks/useNatRules'
+import { useHosts, useAdminHosts } from '@/hooks/useHosts'
+import { useNatRules, useCreateNatRule, useCreateNatRuleAdmin, useDeleteNatRule, type NatRule } from '@/hooks/useNatRules'
 import { usePolicies } from '@/hooks/usePolicies'
 import { useToast } from '@/hooks/use-toast'
+import { getTokenPayload } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,34 +59,58 @@ function StatusBadge({ status }: { status: NatRule['status'] }) {
   )
 }
 
+function portDisplay(portStart: number, portEnd: number) {
+  return portStart === portEnd ? String(portStart) : `${portStart}–${portEnd}`
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function NatRulesPage() {
+  const isAdmin = getTokenPayload()?.role === 'ADMIN'
+
   const { data: rules = [], isLoading } = useNatRules()
-  const { data: hosts = [] } = useHosts()
+  const { data: userHosts = [] } = useHosts()
+  const { data: adminHosts = [] } = useAdminHosts({ enabled: isAdmin })
+  const hosts = isAdmin ? adminHosts : userHosts
   const { data: policies = [] } = usePolicies()
   const createMutation = useCreateNatRule()
+  const createAdminMutation = useCreateNatRuleAdmin()
   const deleteMutation = useDeleteNatRule()
   const { toast } = useToast()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedHostId, setSelectedHostId] = useState('')
   const [protocol, setProtocol] = useState('')
-  const [port, setPort] = useState('')
+  const [portStart, setPortStart] = useState('')
+  const [portEnd, setPortEnd] = useState('')
   const [description, setDescription] = useState('')
+  const [expiresAt, setExpiresAt] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'ALL' | NatRule['status']>('ACTIVE')
 
   const selectedPolicy = policies.find((p) => p.host.id === Number(selectedHostId))
-  const allowedProtocols = selectedPolicy
-    ? selectedPolicy.allowedProtocols.split(',').map((s) => s.trim())
-    : ['TCP', 'UDP']
+
+  const allowedProtocols: string[] = isAdmin
+    ? ['TCP', 'UDP', 'TCP/UDP']
+    : selectedPolicy
+      ? [
+          ...selectedPolicy.allowedProtocols.split(',').map((s) => s.trim()),
+          ...(selectedPolicy.allowedProtocols.includes('TCP') && selectedPolicy.allowedProtocols.includes('UDP')
+            ? ['TCP/UDP']
+            : []),
+        ]
+      : ['TCP', 'UDP']
+
+  const portMin = isAdmin ? 1 : (selectedPolicy?.portRangeMin ?? 1)
+  const portMax = isAdmin ? 65535 : (selectedPolicy?.portRangeMax ?? 65535)
 
   function resetForm() {
     setSelectedHostId('')
     setProtocol('')
-    setPort('')
+    setPortStart('')
+    setPortEnd('')
     setDescription('')
+    setExpiresAt('')
   }
 
   function handleDialogChange(open: boolean) {
@@ -96,22 +121,33 @@ export default function NatRulesPage() {
   function handleHostChange(id: string) {
     setSelectedHostId(id)
     const pol = policies.find((p) => p.host.id === Number(id))
-    setProtocol(pol ? pol.allowedProtocols.split(',')[0].trim() : 'TCP')
-    setPort('')
+    setProtocol(isAdmin ? 'TCP' : pol ? pol.allowedProtocols.split(',')[0].trim() : 'TCP')
+    setPortStart('')
+    setPortEnd('')
   }
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault()
+    const start = Number(portStart)
+    const end = Number(portEnd || portStart)
+    if (end < start) {
+      toast({ title: 'Invalid port range', description: 'Port End must be ≥ Port Start', variant: 'destructive' })
+      return
+    }
+    const mutation = isAdmin ? createAdminMutation : createMutation
     try {
-      await createMutation.mutateAsync({
+      await mutation.mutateAsync({
         hostId: Number(selectedHostId),
         protocol,
-        port: Number(port),
+        portStart: start,
+        portEnd: end,
         description: description.trim(),
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       })
       setDialogOpen(false)
       resetForm()
-      toast({ title: 'Rule created', description: `${protocol} :${port} is now active.` })
+      const portLabel = start === end ? String(start) : `${start}–${end}`
+      toast({ title: 'Rule created', description: `${protocol} :${portLabel} is now active.` })
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -133,6 +169,16 @@ export default function NatRulesPage() {
       setDeleteConfirmId(null)
     }
   }
+
+  const isMutating = createMutation.isPending || createAdminMutation.isPending
+  const portEndNum = Number(portEnd || portStart)
+  const submitDisabled =
+    isMutating ||
+    !selectedHostId ||
+    !protocol ||
+    !portStart ||
+    !description ||
+    portEndNum < Number(portStart)
 
   const activeCount = rules.filter((r) => r.status === 'ACTIVE').length
   const filtered = statusFilter === 'ALL' ? rules : rules.filter((r) => r.status === statusFilter)
@@ -172,7 +218,7 @@ export default function NatRulesPage() {
 
           <DialogContent className="sm:max-w-[420px]">
             <DialogHeader>
-              <DialogTitle>Create NAT Rule</DialogTitle>
+              <DialogTitle>Create NAT Rule{isAdmin && ' (Admin)'}</DialogTitle>
             </DialogHeader>
 
             <form onSubmit={handleCreate} id="create-rule-form" className="space-y-4 py-2">
@@ -206,46 +252,81 @@ export default function NatRulesPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedPolicy && (
+                {!isAdmin && selectedPolicy && (
                   <p className="text-xs text-muted-foreground">
                     Allowed: <span className="font-mono">{selectedPolicy.allowedProtocols}</span>
                   </p>
                 )}
               </div>
 
-              {/* Port */}
+              {/* Port range */}
               <div className="space-y-1.5">
-                <Label htmlFor="port">
-                  Port{' '}
-                  {selectedPolicy && (
-                    <span className="text-muted-foreground font-normal">
-                      ({selectedPolicy.portRangeMin}–{selectedPolicy.portRangeMax})
-                    </span>
-                  )}
+                <Label>
+                  Port(s){' '}
+                  <span className="text-muted-foreground font-normal">
+                    ({portMin}–{portMax})
+                  </span>
                 </Label>
-                <Input
-                  id="port"
-                  type="number"
-                  value={port}
-                  onChange={(e) => setPort(e.target.value)}
-                  min={selectedPolicy?.portRangeMin ?? 1}
-                  max={selectedPolicy?.portRangeMax ?? 65535}
-                  placeholder="e.g. 25565"
-                  required
-                  className="font-mono"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="portStart"
+                    type="number"
+                    value={portStart}
+                    onChange={(e) => setPortStart(e.target.value)}
+                    min={portMin}
+                    max={portMax}
+                    placeholder="Start"
+                    required
+                    className="font-mono"
+                  />
+                  <Input
+                    id="portEnd"
+                    type="number"
+                    value={portEnd}
+                    onChange={(e) => setPortEnd(e.target.value)}
+                    min={portMin}
+                    max={portMax}
+                    placeholder="End (same = single)"
+                    className="font-mono"
+                  />
+                </div>
               </div>
 
               {/* Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="description">Description</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="description">Description</Label>
+                  <span className={cn('text-xs tabular-nums', description.length >= 16 ? 'text-destructive' : 'text-muted-foreground')}>
+                    {description.length}/16
+                  </span>
+                </div>
                 <Input
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. MC"
-                  maxLength={8}
+                  placeholder="e.g. Minecraft"
+                  maxLength={16}
                   required
+                />
+              </div>
+
+              {/* Expiry */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="expiresAt">Expires at <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  {expiresAt && (
+                    <button type="button" onClick={() => setExpiresAt('')} className="text-xs text-muted-foreground hover:text-foreground">
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="expiresAt"
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                  className="font-mono"
                 />
               </div>
             </form>
@@ -257,9 +338,9 @@ export default function NatRulesPage() {
               <Button
                 type="submit"
                 form="create-rule-form"
-                disabled={createMutation.isPending || !selectedHostId || !protocol || !port || !description}
+                disabled={submitDisabled}
               >
-                {createMutation.isPending ? 'Creating…' : 'Create Rule'}
+                {isMutating ? 'Creating…' : 'Create Rule'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -288,10 +369,11 @@ export default function NatRulesPage() {
               <TableRow>
                 <TableHead>Host</TableHead>
                 <TableHead>Protocol</TableHead>
-                <TableHead>Port</TableHead>
+                <TableHead>Port(s)</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead>Expires</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -313,7 +395,7 @@ export default function NatRulesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono font-semibold text-primary">
-                    {rule.port}
+                    {portDisplay(rule.portStart, rule.portEnd)}
                   </TableCell>
                   <TableCell className="text-muted-foreground max-w-[180px] truncate">
                     {rule.description ?? '—'}
@@ -323,6 +405,15 @@ export default function NatRulesPage() {
                   </TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
                     {new Date(rule.createdAt).toLocaleDateString('de-DE')}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono whitespace-nowrap">
+                    {rule.expiresAt ? (
+                      <span className={cn(new Date(rule.expiresAt) < new Date() ? 'text-muted-foreground line-through' : 'text-amber-400')}>
+                        {new Date(rule.expiresAt).toLocaleString('de-DE')}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     {rule.status !== 'DELETED' &&
