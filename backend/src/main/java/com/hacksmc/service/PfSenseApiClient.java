@@ -87,7 +87,7 @@ public class PfSenseApiClient {
         body.put("local_port", String.valueOf(port));
         body.put("descr", descr);
         body.put("disabled", false);
-        body.put("associated_rule_id", "");
+        body.put("associated_rule_id", "add");
 
         try {
             restClient.post()
