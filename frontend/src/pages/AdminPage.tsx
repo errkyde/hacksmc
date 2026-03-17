@@ -2341,9 +2341,126 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.4.0</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.4.1</span>
       </div>
     </div>
+  )
+}
+
+// ─── Email Profile Form ────────────────────────────────────────────────────────
+
+interface ProfileFormProps {
+  editingId: number | 'new'
+  formEmail: string; setFormEmail: (v: string) => void
+  formCreate: boolean; setFormCreate: (v: boolean) => void
+  formDelete: boolean; setFormDelete: (v: boolean) => void
+  formExpire: boolean; setFormExpire: (v: boolean) => void
+  formScope: 'ALL' | 'SPECIFIC'; setFormScope: (v: 'ALL' | 'SPECIFIC') => void
+  formUserIds: number[]
+  toggleUserId: (id: number) => void
+  users: AdminUser[]
+  isSaving: boolean
+  onSubmit: (e: React.FormEvent) => void
+  onCancel: () => void
+}
+
+function ProfileForm({
+  editingId, formEmail, setFormEmail,
+  formCreate, setFormCreate, formDelete, setFormDelete, formExpire, setFormExpire,
+  formScope, setFormScope, formUserIds, toggleUserId,
+  users, isSaving, onSubmit, onCancel,
+}: ProfileFormProps) {
+  return (
+    <form onSubmit={onSubmit} className="rounded-lg border bg-card p-4 space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-xs">E-Mail-Adresse</Label>
+        <Input
+          type="email"
+          value={formEmail}
+          onChange={e => setFormEmail(e.target.value)}
+          placeholder="empfaenger@example.com"
+          required
+          className="text-sm"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Ereignisse</p>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={formCreate} onChange={e => setFormCreate(e.target.checked)} className="accent-primary" />
+            Regel erstellt
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={formDelete} onChange={e => setFormDelete(e.target.checked)} className="accent-primary" />
+            Regel gelöscht
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={formExpire} onChange={e => setFormExpire(e.target.checked)} className="accent-primary" />
+            Regel abgelaufen
+          </label>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Benutzer</p>
+        <div className="flex gap-2 mb-2">
+          <button
+            type="button"
+            onClick={() => setFormScope('ALL')}
+            className={cn(
+              'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
+              formScope === 'ALL'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-border text-muted-foreground hover:border-primary/50'
+            )}
+          >
+            Alle
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormScope('SPECIFIC')}
+            className={cn(
+              'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
+              formScope === 'SPECIFIC'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-border text-muted-foreground hover:border-primary/50'
+            )}
+          >
+            Auswahl
+          </button>
+        </div>
+        {formScope === 'SPECIFIC' && (
+          <div className="flex flex-wrap gap-2">
+            {users.map(u => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => toggleUserId(u.id)}
+                className={cn(
+                  'px-2.5 py-1 rounded text-xs font-mono border transition-colors',
+                  formUserIds.includes(u.id)
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/50'
+                )}
+              >
+                {u.username}
+              </button>
+            ))}
+            {users.length === 0 && (
+              <span className="text-xs text-muted-foreground italic">Keine Benutzer</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={isSaving || !formEmail.trim()}>
+          {isSaving ? 'Wird gespeichert…' : editingId === 'new' ? 'Erstellen' : 'Speichern'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Abbrechen</Button>
+      </div>
+    </form>
   )
 }
 
@@ -2433,100 +2550,13 @@ function EmailProfilesSection() {
   }
 
   const isSaving = createMutation.isPending || updateMutation.isPending
-
-  function ProfileForm({ onCancel }: { onCancel: () => void }) {
-    return (
-      <form onSubmit={handleSave} className="rounded-lg border bg-card p-4 space-y-4">
-        <div className="space-y-1.5">
-          <Label className="text-xs">E-Mail-Adresse</Label>
-          <Input
-            type="email"
-            value={formEmail}
-            onChange={e => setFormEmail(e.target.value)}
-            placeholder="empfaenger@example.com"
-            required
-            className="text-sm"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Ereignisse</p>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={formCreate} onChange={e => setFormCreate(e.target.checked)} className="accent-primary" />
-              Regel erstellt
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={formDelete} onChange={e => setFormDelete(e.target.checked)} className="accent-primary" />
-              Regel gelöscht
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={formExpire} onChange={e => setFormExpire(e.target.checked)} className="accent-primary" />
-              Regel abgelaufen
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Benutzer</p>
-          <div className="flex gap-2 mb-2">
-            <button
-              type="button"
-              onClick={() => setFormScope('ALL')}
-              className={cn(
-                'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
-                formScope === 'ALL'
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:border-primary/50'
-              )}
-            >
-              Alle
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormScope('SPECIFIC')}
-              className={cn(
-                'px-3 py-1 rounded-md text-xs font-mono border transition-colors',
-                formScope === 'SPECIFIC'
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:border-primary/50'
-              )}
-            >
-              Auswahl
-            </button>
-          </div>
-          {formScope === 'SPECIFIC' && (
-            <div className="flex flex-wrap gap-2">
-              {users.map(u => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => toggleUserId(u.id)}
-                  className={cn(
-                    'px-2.5 py-1 rounded text-xs font-mono border transition-colors',
-                    formUserIds.includes(u.id)
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/50'
-                  )}
-                >
-                  {u.username}
-                </button>
-              ))}
-              {users.length === 0 && (
-                <span className="text-xs text-muted-foreground italic">Keine Benutzer</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={isSaving || !formEmail.trim()}>
-            {isSaving ? 'Wird gespeichert…' : editingId === 'new' ? 'Erstellen' : 'Speichern'}
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Abbrechen</Button>
-        </div>
-      </form>
-    )
+  const sharedFormProps = {
+    editingId: editingId as number | 'new',
+    formEmail, setFormEmail, formCreate, setFormCreate,
+    formDelete, setFormDelete, formExpire, setFormExpire,
+    formScope, setFormScope, formUserIds, toggleUserId,
+    users, isSaving, onSubmit: handleSave,
+    onCancel: () => setEditingId(null),
   }
 
   return (
@@ -2547,7 +2577,7 @@ function EmailProfilesSection() {
       </div>
 
       {editingId === 'new' && (
-        <ProfileForm onCancel={() => setEditingId(null)} />
+        <ProfileForm {...sharedFormProps} />
       )}
 
       {isLoading ? (
@@ -2561,7 +2591,7 @@ function EmailProfilesSection() {
           {profiles.map(p => (
             <div key={p.id}>
               {editingId === p.id ? (
-                <ProfileForm onCancel={() => setEditingId(null)} />
+                <ProfileForm {...sharedFormProps} />
               ) : (
                 <div className="rounded-lg border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">

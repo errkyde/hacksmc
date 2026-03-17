@@ -215,12 +215,17 @@ public class AdminController {
                     org.springframework.http.HttpStatus.BAD_REQUEST, "SMTP not configured (mailHost missing)");
         }
         try {
-            org.springframework.mail.SimpleMailMessage msg = new org.springframework.mail.SimpleMailMessage();
+            jakarta.mail.internet.MimeMessage msg = sender.createMimeMessage();
+            org.springframework.mail.javamail.MimeMessageHelper helper =
+                    new org.springframework.mail.javamail.MimeMessageHelper(msg, false, "UTF-8");
             String from = s.getMailFrom() != null ? s.getMailFrom() : s.getMailUsername();
-            if (from != null && !from.isBlank()) msg.setFrom(from);
-            msg.setTo(req.to());
-            msg.setSubject("[HackSMC] Test-E-Mail");
-            msg.setText("Diese E-Mail bestätigt, dass die SMTP-Konfiguration in HackSMC funktioniert.");
+            if (from != null && !from.isBlank()) helper.setFrom(from);
+            helper.setTo(req.to());
+            helper.setSubject("[HackSMC] Test-E-Mail");
+            helper.setText("<html><body style=\"font-family:monospace;background:#0f1117;color:#e5e7eb;padding:32px\">"
+                    + "<h2 style=\"color:#00B0F4\">HackSMC — Test-E-Mail</h2>"
+                    + "<p>Die SMTP-Konfiguration funktioniert korrekt.</p>"
+                    + "</body></html>", true);
             sender.send(msg);
             return Map.of("status", "ok", "message", "Test-Mail an " + req.to() + " gesendet");
         } catch (Exception e) {
