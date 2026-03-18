@@ -229,8 +229,23 @@ public class AdminController {
             sender.send(msg);
             return Map.of("status", "ok", "message", "Test-Mail an " + req.to() + " gesendet");
         } catch (Exception e) {
+            String msg = e.getMessage();
+            if (msg == null) msg = e.getClass().getSimpleName();
+            String friendly;
+            if (msg.contains("UnknownHostException") || msg.contains("unknown host") || msg.contains("Couldn't connect to host")) {
+                String host = s.getMailHost() != null ? s.getMailHost() : "?";
+                friendly = "Host nicht auflösbar: " + host + " – mailHost und Netzwerk prüfen";
+            } else if (msg.contains("Connection refused")) {
+                friendly = "Verbindung abgelehnt – Host und Port prüfen";
+            } else if (msg.contains("timeout") || msg.contains("timed out")) {
+                friendly = "Verbindungs-Timeout – Host, Port und Firewall prüfen";
+            } else if (msg.contains("Authentication") || msg.contains("authentication")) {
+                friendly = "Authentifizierung fehlgeschlagen – Benutzername und Passwort prüfen";
+            } else {
+                friendly = msg.split("\n")[0];
+            }
             throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_GATEWAY, "SMTP-Fehler: " + e.getMessage());
+                    org.springframework.http.HttpStatus.BAD_GATEWAY, "SMTP-Fehler: " + friendly);
         }
     }
 

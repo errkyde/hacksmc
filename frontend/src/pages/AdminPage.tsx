@@ -2341,7 +2341,7 @@ function PfSenseTab() {
       />
 
       <div className="flex justify-end mt-6">
-        <span className="text-[11px] font-mono text-muted-foreground">v1.4.1</span>
+        <span className="text-[11px] font-mono text-muted-foreground">v1.4.2</span>
       </div>
     </div>
   )
