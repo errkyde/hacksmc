@@ -250,9 +250,9 @@ if [[ "$RUN_MODE" == "dev" ]]; then
   (
     cd "$ROOT_DIR/backend"
     if [[ "$DB_MODE" == "h2" ]]; then
-      mvn spring-boot:run -q -Dspring-boot.run.profiles=h2
+      mvn spring-boot:run -q -Dspring-boot.run.profiles=h2 -Dspring-boot.run.jvmArguments="-Djava.net.preferIPv4Stack=true"
     else
-      mvn spring-boot:run -q
+      mvn spring-boot:run -q -Dspring-boot.run.jvmArguments="-Djava.net.preferIPv4Stack=true"
     fi
   ) &
   BACKEND_PID=$!
