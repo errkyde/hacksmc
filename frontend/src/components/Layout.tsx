@@ -22,6 +22,7 @@ import { Moon, Sun, LogOut, KeyRound } from 'lucide-react'
 const BASE_NAV = [
   { href: '/', label: 'Dashboard' },
   { href: '/rules', label: 'NAT Rules' },
+  { href: '/topology', label: 'Topologie' },
 ]
 
 // ─── Change Password Dialog ────────────────────────────────────────────────────

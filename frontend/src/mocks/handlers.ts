@@ -271,4 +271,90 @@ export const handlers = [
     Object.assign(policy, body)
     return HttpResponse.json({ id: policy.id, allowedProtocols: policy.allowedProtocols, portRangeMin: policy.portRangeMin, portRangeMax: policy.portRangeMax, maxRules: policy.maxRules })
   }),
+
+  // ── Network Topology (user-facing) ────────────────────────────────────────
+  http.get('/api/topology/groups', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.get('/api/topology/devices', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.get('/api/topology/connections', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.post('/api/topology/connections', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: Date.now(), ...body, status: 'OK', natRuleId: null, createdAt: new Date().toISOString() }, { status: 201 })
+  }),
+  http.delete('/api/topology/connections/:id', async () => {
+    await delay(DELAY)
+    return new HttpResponse(null, { status: 204 })
+  }),
+  http.patch('/api/topology/devices/:id/position', async () => {
+    await delay(DELAY)
+    return new HttpResponse(null, { status: 200 })
+  }),
+
+  // ── Network Topology (admin) ──────────────────────────────────────────────
+  http.get('/api/admin/topology/groups', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.post('/api/admin/topology/groups', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: Date.now(), collapsed: false, createdAt: new Date().toISOString(), ...body }, { status: 201 })
+  }),
+  http.put('/api/admin/topology/groups/:id', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: 1, name: 'Group', color: '#64748b', layerOrder: 0, collapsed: false, ...body })
+  }),
+  http.delete('/api/admin/topology/groups/:id', async () => {
+    await delay(DELAY)
+    return new HttpResponse(null, { status: 204 })
+  }),
+  http.get('/api/admin/topology/devices', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.post('/api/admin/topology/devices', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: Date.now(), isManual: true, isShared: false, posX: 0, posY: 0, deviceType: 'HOST', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...body }, { status: 201 })
+  }),
+  http.patch('/api/admin/topology/devices/:id', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: 1, name: 'Device', deviceType: 'HOST', isManual: true, isShared: false, posX: 0, posY: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...body })
+  }),
+  http.delete('/api/admin/topology/devices/:id', async () => {
+    await delay(DELAY)
+    return new HttpResponse(null, { status: 204 })
+  }),
+  http.post('/api/admin/topology/devices/import-scan', async () => {
+    await delay(DELAY)
+    return HttpResponse.json({ imported: 3 })
+  }),
+  http.get('/api/admin/topology/connections', async () => {
+    await delay(DELAY)
+    return HttpResponse.json([])
+  }),
+  http.post('/api/admin/topology/connections', async ({ request }) => {
+    await delay(DELAY)
+    const body = await request.json() as Record<string, unknown>
+    return HttpResponse.json({ id: Date.now(), status: 'OK', natRuleId: null, createdAt: new Date().toISOString(), ...body }, { status: 201 })
+  }),
+  http.delete('/api/admin/topology/connections/:id', async () => {
+    await delay(DELAY)
+    return new HttpResponse(null, { status: 204 })
+  }),
+  http.post('/api/admin/topology/scan/arp', async () => {
+    await delay(DELAY)
+    return HttpResponse.json({ upserted: 3 })
+  }),
 ]

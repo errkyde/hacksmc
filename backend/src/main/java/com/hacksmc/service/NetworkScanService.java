@@ -16,8 +16,12 @@ import java.util.concurrent.*;
 @Slf4j
 public class NetworkScanService {
 
-    private static final int TIMEOUT_MS = 800;
+    private static final int ICMP_TIMEOUT_MS = 800;
+    private static final int TCP_TIMEOUT_MS = 300;
     private static final int MAX_HOSTS = 1024; // cap at /22
+
+    /** Ports probed for device-type detection */
+    private static final int[] PROBE_PORTS = {22, 23, 80, 161, 443, 3389, 8080, 9100};
 
     public List<ScannedHostResult> scan(String cidr) {
         long[] range = parseCidr(cidr);
@@ -40,7 +44,7 @@ public class NetworkScanService {
 
         pool.shutdown();
         try {
-            pool.awaitTermination(30, TimeUnit.SECONDS);
+            pool.awaitTermination(60, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -59,29 +63,38 @@ public class NetworkScanService {
 
     private ScannedHostResult probe(String ip) {
         long t0 = System.currentTimeMillis();
+        boolean reachable = false;
+        String hostname = null;
+        int latency = 0;
 
         // ICMP first
         try {
             InetAddress addr = InetAddress.getByName(ip);
-            if (addr.isReachable(TIMEOUT_MS)) {
-                int latency = (int) (System.currentTimeMillis() - t0);
-                String hostname = resolveHostname(addr, ip);
-                return new ScannedHostResult(ip, hostname, latency);
+            if (addr.isReachable(ICMP_TIMEOUT_MS)) {
+                reachable = true;
+                latency = (int) (System.currentTimeMillis() - t0);
+                hostname = resolveHostname(addr, ip);
             }
         } catch (Exception ignored) {}
 
-        // TCP fallback on common ports
-        for (int port : new int[]{22, 80, 443, 8080, 3389}) {
+        // TCP scan on all probe ports — collect which are open
+        List<Integer> openPorts = new ArrayList<>();
+        for (int port : PROBE_PORTS) {
             try (Socket s = new Socket()) {
-                s.connect(new InetSocketAddress(ip, port), TIMEOUT_MS);
-                int latency = (int) (System.currentTimeMillis() - t0);
-                InetAddress addr = InetAddress.getByName(ip);
-                String hostname = resolveHostname(addr, ip);
-                return new ScannedHostResult(ip, hostname, latency);
+                s.connect(new InetSocketAddress(ip, port), TCP_TIMEOUT_MS);
+                openPorts.add(port);
+                if (!reachable) {
+                    reachable = true;
+                    latency = (int) (System.currentTimeMillis() - t0);
+                    if (hostname == null) {
+                        hostname = resolveHostname(InetAddress.getByName(ip), ip);
+                    }
+                }
             } catch (Exception ignored) {}
         }
 
-        return null;
+        if (!reachable) return null;
+        return new ScannedHostResult(ip, hostname, latency, openPorts);
     }
 
     private String resolveHostname(InetAddress addr, String ip) {

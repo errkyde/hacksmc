@@ -1,5 +1,6 @@
 package com.hacksmc.service;
 
+import com.hacksmc.dto.ArpEntryDto;
 import com.hacksmc.dto.PfSenseStatusResponse;
 import com.hacksmc.exception.PfSenseException;
 import lombok.extern.slf4j.Slf4j;
@@ -209,6 +210,32 @@ public class PfSenseApiClient {
         if (msg.contains("URI is not absolute") || msg.contains("not absolute"))
             return "PFSENSE_BASE_URL muss mit https:// beginnen";
         return msg;
+    }
+
+    /**
+     * Fetches the ARP table from pfSense.
+     * Returns entries with IP, MAC, interface, and optional hostname.
+     */
+    @SuppressWarnings("unchecked")
+    public List<ArpEntryDto> fetchArpTable() {
+        Map<String, Object> response;
+        try {
+            response = restClient.get()
+                    .uri("/api/v2/diagnostics/arp_table")
+                    .retrieve()
+                    .body(Map.class);
+        } catch (Exception e) {
+            log.error("pfSense fetchArpTable failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
+        if (response == null || !response.containsKey("data")) return List.of();
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
+        return data.stream().map(entry -> new ArpEntryDto(
+                (String) entry.get("ip"),
+                (String) entry.get("mac"),
+                (String) entry.get("interface"),
+                (String) entry.get("hostname")
+        )).toList();
     }
 
     /** Quick connectivity check against pfSense via TCP connect. Result cached for 5 minutes. */

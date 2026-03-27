@@ -299,6 +299,7 @@ export interface ScannedHost {
   ipAddress: string
   hostname: string | null
   latencyMs: number
+  openPorts?: number[]
 }
 
 export function useNetworkScan() {

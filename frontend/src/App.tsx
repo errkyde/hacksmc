@@ -4,6 +4,7 @@ import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import NatRulesPage from '@/pages/NatRulesPage'
 import AdminPage from '@/pages/AdminPage'
+import TopologyPage from '@/pages/TopologyPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -43,6 +44,14 @@ export default function App() {
           <AdminRoute>
             <AdminPage />
           </AdminRoute>
+        }
+      />
+      <Route
+        path="/topology"
+        element={
+          <ProtectedRoute>
+            <TopologyPage />
+          </ProtectedRoute>
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
