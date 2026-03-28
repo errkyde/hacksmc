@@ -26,9 +26,14 @@ export default function DashboardPage() {
   const pendingRules = rules.filter((r) => r.status === 'PENDING')
   const isLoading = hostsLoading || rulesLoading
 
+  const activeCountByHost = new Map<number, number>()
+  for (const r of activeRules) {
+    activeCountByHost.set(r.host.id, (activeCountByHost.get(r.host.id) ?? 0) + 1)
+  }
+
   const sortedHosts = [...hosts].sort((a, b) => {
-    const aActive = activeRules.filter((r) => r.host.id === a.id).length
-    const bActive = activeRules.filter((r) => r.host.id === b.id).length
+    const aActive = activeCountByHost.get(a.id) ?? 0
+    const bActive = activeCountByHost.get(b.id) ?? 0
     const aOnline = hostStatus[a.id] ? 1 : 0
     const bOnline = hostStatus[b.id] ? 1 : 0
     switch (sortKey) {
@@ -122,9 +127,10 @@ export default function DashboardPage() {
           {sortedHosts.map((host) => {
             const policy = policies.find((p) => p.host.id === host.id)
             const hostActiveRules = activeRules.filter((r) => r.host.id === host.id)
+            const hostActiveCount = hostActiveRules.length
             const maxRules = policy?.maxRules ?? 0
-            const usage = maxRules > 0 ? hostActiveRules.length / maxRules : 0
-            const atLimit = hostActiveRules.length >= maxRules && maxRules > 0
+            const usage = maxRules > 0 ? hostActiveCount / maxRules : 0
+            const atLimit = hostActiveCount >= maxRules && maxRules > 0
             const online = hostStatus[host.id]
             const statusKnown = !statusLoading && host.id in hostStatus
 
@@ -174,7 +180,7 @@ export default function DashboardPage() {
                               atLimit ? 'text-destructive' : 'text-foreground'
                             )}
                           >
-                            {hostActiveRules.length}/{maxRules}
+                            {hostActiveCount}/{maxRules}
                           </span>
                         </div>
                         <div className="h-1 rounded-full bg-muted overflow-hidden">

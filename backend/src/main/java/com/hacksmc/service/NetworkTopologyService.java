@@ -2,6 +2,7 @@ package com.hacksmc.service;
 
 import com.hacksmc.dto.*;
 import com.hacksmc.entity.*;
+import com.hacksmc.exception.PolicyViolationException;
 import com.hacksmc.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -251,6 +252,8 @@ public class NetworkTopologyService {
                         : natRuleService.createRule(username, natReq);
                 c.setNatRule(natRule);
                 c.setStatus("OK");
+            } catch (PolicyViolationException e) {
+                throw e;
             } catch (Exception e) {
                 log.warn("Could not create NAT rule for topology connection: {}", e.getMessage());
                 c.setStatus("ISSUE");
@@ -294,10 +297,10 @@ public class NetworkTopologyService {
         User user = getUser(username);
         NetworkDevice d = deviceRepo.findById(deviceId)
                 .orElseThrow(() -> new NoSuchElementException("Device not found: " + deviceId));
-        if (!isAdmin(user) && d.getHost() != null) {
+        if (!isAdmin(user)) {
             Set<Long> userHostIds = policyRepo.findByUserIdWithHost(user.getId()).stream()
                     .map(p -> p.getHost().getId()).collect(Collectors.toSet());
-            if (!userHostIds.contains(d.getHost().getId())) {
+            if (d.getHost() == null || !userHostIds.contains(d.getHost().getId())) {
                 throw new AccessDeniedException("Cannot move this device");
             }
         }

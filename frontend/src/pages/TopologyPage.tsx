@@ -86,13 +86,14 @@ function TopologyInner() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function toggleGroupCollapse(groupId: number) {
+    const willCollapse = !collapsedGroups.has(groupId)
     setCollapsedGroups(prev => {
       const next = new Set(prev)
       if (next.has(groupId)) next.delete(groupId)
       else next.add(groupId)
       return next
     })
-    updateGroup.mutate({ id: groupId, data: { collapsed: !collapsedGroups.has(groupId) } })
+    updateGroup.mutate({ id: groupId, data: { collapsed: willCollapse } })
   }
 
   // ── Node/Edge transforms ──────────────────────────────────────────────────
@@ -194,6 +195,11 @@ function TopologyInner() {
 
   const dragTimeouts = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
 
+  useEffect(() => {
+    const timeouts = dragTimeouts.current
+    return () => { timeouts.forEach(t => clearTimeout(t)); timeouts.clear() }
+  }, [])
+
   const handleNodeDragStop: OnNodeDrag = useCallback((_event, node) => {
     if (node.type !== 'deviceNode') return
     const id = Number(node.id)
@@ -209,13 +215,17 @@ function TopologyInner() {
   const handleConnect: OnConnect = useCallback((params) => {
     const sourceId = Number(params.source)
     const targetId = Number(params.target)
+    const tempId = `temp-${Date.now()}`
+    setEdges(eds => addEdge({ ...params, id: tempId }, eds))
     createConn.mutate(
       { sourceDeviceId: sourceId, targetDeviceId: targetId },
       {
-        onError: () => toast({ title: 'Fehler', description: 'Verbindung konnte nicht erstellt werden.', variant: 'destructive' }),
+        onError: () => {
+          setEdges(eds => eds.filter(e => e.id !== tempId))
+          toast({ title: 'Fehler', description: 'Verbindung konnte nicht erstellt werden.', variant: 'destructive' })
+        },
       },
     )
-    setEdges(eds => addEdge(params, eds))
   }, [createConn, setEdges, toast])
 
   function handlePaneClick() {

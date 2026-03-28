@@ -29,13 +29,15 @@ export function AddDeviceDialog({ open, onOpenChange, groups, onSubmit, loading 
   const [description, setDescription] = useState('')
   const [isShared, setIsShared] = useState(false)
 
+  const ipValid = ip.trim() === '' || /^(\d{1,3}\.){3}\d{1,3}$/.test(ip.trim())
+
   function reset() {
     setName(''); setIp(''); setMac(''); setType('HOST')
     setGroupId('none'); setDescription(''); setIsShared(false)
   }
 
   function handleSubmit() {
-    if (!name.trim()) return
+    if (!name.trim() || !ipValid) return
     onSubmit({
       name: name.trim(),
       ipAddress: ip.trim() || undefined,
@@ -63,7 +65,13 @@ export function AddDeviceDialog({ open, onOpenChange, groups, onSubmit, loading 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">IP-Adresse</Label>
-              <Input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.1" />
+              <Input
+                value={ip}
+                onChange={e => setIp(e.target.value)}
+                placeholder="192.168.1.1"
+                className={!ipValid ? 'border-destructive' : ''}
+              />
+              {!ipValid && <p className="text-[10px] text-destructive">Ungültige IP-Adresse</p>}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">MAC-Adresse</Label>
@@ -116,7 +124,7 @@ export function AddDeviceDialog({ open, onOpenChange, groups, onSubmit, loading 
           <DialogClose asChild>
             <Button variant="outline" size="sm">Abbrechen</Button>
           </DialogClose>
-          <Button size="sm" onClick={handleSubmit} disabled={!name.trim() || loading}>
+          <Button size="sm" onClick={handleSubmit} disabled={!name.trim() || !ipValid || loading}>
             {loading ? 'Speichert…' : 'Hinzufügen'}
           </Button>
         </DialogFooter>

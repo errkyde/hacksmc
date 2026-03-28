@@ -97,6 +97,7 @@ export function useTopologyGroups() {
   return useQuery<NetworkGroupDto[]>({
     queryKey: ['topology', 'groups'],
     queryFn: () => api.get<NetworkGroupDto[]>('/api/topology/groups').then(r => r.data),
+    staleTime: 30_000,
   })
 }
 
@@ -104,6 +105,7 @@ export function useTopologyDevices() {
   return useQuery<NetworkDeviceDto[]>({
     queryKey: ['topology', 'devices'],
     queryFn: () => api.get<NetworkDeviceDto[]>('/api/topology/devices').then(r => r.data),
+    staleTime: 30_000,
   })
 }
 
@@ -111,6 +113,7 @@ export function useTopologyConnections() {
   return useQuery<NetworkConnectionDto[]>({
     queryKey: ['topology', 'connections'],
     queryFn: () => api.get<NetworkConnectionDto[]>('/api/topology/connections').then(r => r.data),
+    staleTime: 30_000,
   })
 }
 

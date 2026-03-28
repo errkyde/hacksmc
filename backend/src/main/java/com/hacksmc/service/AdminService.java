@@ -9,6 +9,7 @@ import com.hacksmc.repository.NatRuleRepository;
 import com.hacksmc.repository.PolicyRepository;
 import com.hacksmc.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,7 +22,10 @@ import com.hacksmc.entity.NatRuleStatus;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -103,12 +107,14 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<AdminUserResponse> getAllUsers() {
+        Map<Long, Long> countByUser = policyRepository.countsByUserId().stream()
+                .collect(Collectors.toMap(a -> (Long) a[0], a -> (Long) a[1]));
         return userRepository.findAll().stream()
                 .map(u -> new AdminUserResponse(
                         u.getId(),
                         u.getUsername(),
                         u.getRole(),
-                        policyRepository.countByUserId(u.getId()),
+                        countByUser.getOrDefault(u.getId(), 0L),
                         u.isEnabled()))
                 .toList();
     }
@@ -205,7 +211,18 @@ public class AdminService {
             List<NatRule> active = natRuleRepository.findByHostIdAndStatusIn(
                     hostId, List.of(NatRuleStatus.ACTIVE, NatRuleStatus.PENDING));
             Instant now = Instant.now();
-            active.forEach(r -> { r.setStatus(NatRuleStatus.DELETED); r.setDeletedAt(now); });
+            active.forEach(r -> {
+                String pfId = r.getPfSenseRuleId();
+                if (pfId != null && !pfId.equals("null") && !pfId.isBlank()) {
+                    try {
+                        pfSenseApiClient.deleteNatRule(pfId);
+                    } catch (Exception e) {
+                        log.warn("Failed to delete pfSense rule {} during host delete: {}", pfId, e.getMessage());
+                    }
+                }
+                r.setStatus(NatRuleStatus.DELETED);
+                r.setDeletedAt(now);
+            });
             natRuleRepository.saveAll(active);
         }
         hostRepository.deleteById(hostId);

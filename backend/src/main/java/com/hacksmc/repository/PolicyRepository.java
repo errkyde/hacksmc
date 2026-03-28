@@ -19,6 +19,9 @@ public interface PolicyRepository extends JpaRepository<Policy, Long> {
 
     long countByUserId(Long userId);
 
+    @Query("SELECT p.user.id, COUNT(p) FROM Policy p GROUP BY p.user.id")
+    List<Object[]> countsByUserId();
+
     long countByHostId(Long hostId);
 
     @Query("SELECT p FROM Policy p JOIN FETCH p.user WHERE p.host.id = :hostId")

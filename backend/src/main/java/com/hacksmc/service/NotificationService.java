@@ -71,13 +71,14 @@ public class NotificationService {
             }
 
             // Discord webhook
-            if (settings.isDiscordEnabled() && settings.getDiscordWebhookUrl() != null
-                    && !settings.getDiscordWebhookUrl().isBlank()) {
+            String webhookUrl = settings.getDiscordWebhookUrl();
+            if (settings.isDiscordEnabled() && webhookUrl != null && !webhookUrl.isBlank()
+                    && webhookUrl.startsWith("https://discord.com/api/webhooks/")) {
                 boolean shouldSend = ("CREATED".equals(action) && settings.isDiscordNotifyCreate())
                         || ("DELETED".equals(action) && settings.isDiscordNotifyDelete())
                         || ("EXPIRED".equals(action) && settings.isDiscordNotifyExpire());
                 if (shouldSend) {
-                    sendDiscord(settings.getDiscordWebhookUrl(), action, rule, hostName, portStr, actorUsername);
+                    sendDiscord(webhookUrl, action, rule, hostName, portStr, actorUsername);
                 }
             }
         } catch (Exception e) {

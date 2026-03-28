@@ -34,7 +34,12 @@ public class AdminInitializer implements ApplicationRunner {
             admin.setRole("ADMIN");
             admin.setEnabled(true);
             userRepository.save(admin);
-            log.info("Admin user created with default password");
+            if ("admin".equals(adminPassword)) {
+                log.warn("*** SECURITY WARNING: Admin user created with default password 'admin'. " +
+                         "Set ADMIN_PASSWORD env var to a strong password! ***");
+            } else {
+                log.info("Admin user created");
+            }
         }
     }
 }

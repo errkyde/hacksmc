@@ -36,7 +36,7 @@ public class NetworkTopologyAdminController {
     }
 
     @PutMapping("/groups/{id}")
-    public NetworkGroupDto updateGroup(@PathVariable Long id, @RequestBody UpdateNetworkGroupRequest req) {
+    public NetworkGroupDto updateGroup(@PathVariable Long id, @Valid @RequestBody UpdateNetworkGroupRequest req) {
         return topologyService.updateGroup(id, req);
     }
 
@@ -60,7 +60,7 @@ public class NetworkTopologyAdminController {
     }
 
     @PatchMapping("/devices/{id}")
-    public NetworkDeviceDto patchDevice(@PathVariable Long id, @RequestBody PatchNetworkDeviceRequest req) {
+    public NetworkDeviceDto patchDevice(@PathVariable Long id, @Valid @RequestBody PatchNetworkDeviceRequest req) {
         return topologyService.patchDevice(id, req);
     }
 

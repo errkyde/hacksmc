@@ -47,6 +47,8 @@ public class NetworkScanService {
             pool.awaitTermination(60, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            pool.shutdownNow();
         }
 
         List<ScannedHostResult> results = new ArrayList<>();
