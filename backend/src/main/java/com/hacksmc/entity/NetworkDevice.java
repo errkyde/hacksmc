@@ -37,10 +37,10 @@ public class NetworkDevice {
     @JoinColumn(name = "group_id")
     private NetworkGroup group;
 
-    @Column(nullable = false)
+    @Column(name = "pos_x", nullable = false)
     private double posX;
 
-    @Column(nullable = false)
+    @Column(name = "pos_y", nullable = false)
     private double posY;
 
     @Column(nullable = false)
