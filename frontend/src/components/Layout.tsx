@@ -148,7 +148,7 @@ function PfSenseStatusBadge() {
   )
 }
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({ children, fluid }: { children: React.ReactNode; fluid?: boolean }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { theme, toggle } = useTheme()
@@ -165,7 +165,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className={cn('min-h-screen bg-background dot-grid', isAdmin && 'admin-mode')}>
+    <div className={cn('h-screen flex flex-col bg-background dot-grid', isAdmin && 'admin-mode')}>
       {/* Top navigation */}
       <header className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
@@ -241,7 +241,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className={cn('flex-1 overflow-auto', fluid ? 'flex flex-col' : 'mx-auto max-w-7xl px-6 py-8')}>
         {children}
       </main>
 

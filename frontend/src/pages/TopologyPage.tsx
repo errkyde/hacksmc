@@ -260,8 +260,8 @@ export default function TopologyPage() {
     : null
 
   return (
-    <Layout>
-      <div className="-mx-6 -my-8 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
+    <Layout fluid>
+      <div className="flex h-full flex-col overflow-hidden">
         <TopologyToolbar
           isAdmin={isAdmin}
           onScanClick={() => setShowScan(true)}
