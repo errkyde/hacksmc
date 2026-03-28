@@ -3,13 +3,16 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${PORT_POSTGRES:5432}/${DB_NAME:hacksmc}
     username: ${DB_USER:hacksmc}
     password: ${DB_PASSWORD}
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
   jpa:
     hibernate:
       ddl-auto: validate
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   flyway:
     enabled: true
@@ -42,11 +45,12 @@ hacksmc:
 
 management:
   server:
-    port: 9000
+    port: ${PORT_BACKEND:3000}
   endpoints:
     web:
       exposure:
         include: health
+      base-path: /internal
   endpoint:
     health:
       show-details: never
