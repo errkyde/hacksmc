@@ -165,7 +165,7 @@ export default function Layout({ children, fluid }: { children: React.ReactNode;
   }
 
   return (
-    <div className={cn('h-screen flex flex-col bg-background dot-grid', isAdmin && 'admin-mode')}>
+    <div className={cn('min-h-screen bg-background dot-grid', fluid && 'h-screen flex flex-col', isAdmin && 'admin-mode')}>
       {/* Top navigation */}
       <header className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
@@ -241,7 +241,7 @@ export default function Layout({ children, fluid }: { children: React.ReactNode;
         </div>
       </header>
 
-      <main className={cn('flex-1 overflow-auto', fluid ? 'flex flex-col' : 'mx-auto max-w-7xl px-6 py-8')}>
+      <main className={cn(fluid ? 'flex-1 overflow-hidden flex flex-col' : 'mx-auto max-w-7xl px-6 py-8')}>
         {children}
       </main>
 

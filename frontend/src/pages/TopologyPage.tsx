@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ReactFlowProvider,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -38,6 +39,16 @@ import { ScanImportDialog } from './topology/ScanImportDialog'
 import type { ScannedHost } from '@/hooks/useAdmin'
 
 export default function TopologyPage() {
+  return (
+    <Layout fluid>
+      <ReactFlowProvider>
+        <TopologyInner />
+      </ReactFlowProvider>
+    </Layout>
+  )
+}
+
+function TopologyInner() {
   const payload = getTokenPayload()
   const isAdmin = payload?.role === 'ADMIN'
   const { toast } = useToast()
@@ -72,6 +83,17 @@ export default function TopologyPage() {
   const [preselectedSourceId, setPreselectedSourceId] = useState<number | undefined>()
 
   const fitViewFn = useRef<(() => void) | null>(null)
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  function toggleGroupCollapse(groupId: number) {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+    updateGroup.mutate({ id: groupId, data: { collapsed: !collapsedGroups.has(groupId) } })
+  }
 
   // ── Node/Edge transforms ──────────────────────────────────────────────────
   const searchLower = search.toLowerCase()
@@ -122,6 +144,7 @@ export default function TopologyPage() {
     })
 
     return [...groupNodes, ...deviceNodes]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, devices, collapsedGroups, search, selectedDeviceId, focusedNodeId, connections])
 
   const rfEdges: Edge[] = useMemo(() =>
@@ -153,20 +176,9 @@ export default function TopologyPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
-  // Sync RF state when data changes
-  useMemo(() => { setNodes(rfNodes) }, [rfNodes])
-  useMemo(() => { setEdges(rfEdges) }, [rfEdges])
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  function toggleGroupCollapse(groupId: number) {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(groupId)) next.delete(groupId)
-      else next.add(groupId)
-      return next
-    })
-    updateGroup.mutate({ id: groupId, data: { collapsed: !collapsedGroups.has(groupId) } })
-  }
+  // Sync RF state when data changes (useEffect, not useMemo — side effects must not run during render)
+  useEffect(() => { setNodes(rfNodes) }, [rfNodes, setNodes])
+  useEffect(() => { setEdges(rfEdges) }, [rfEdges, setEdges])
 
   function handleNodeClick(_: React.MouseEvent, node: Node) {
     if (node.type !== 'deviceNode') return
@@ -260,55 +272,53 @@ export default function TopologyPage() {
     : null
 
   return (
-    <Layout fluid>
-      <div className="flex h-full flex-col overflow-hidden">
-        <TopologyToolbar
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <TopologyToolbar
+        isAdmin={isAdmin}
+        onScanClick={() => setShowScan(true)}
+        onArpClick={handleArpImport}
+        onAddDevice={() => setShowAddDevice(true)}
+        onFitView={() => fitViewFn.current?.()}
+        onReset={handleReset}
+        arpLoading={importArp.isPending}
+      />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        <TopologyLeftSidebar
+          groups={groups}
+          search={search}
+          onSearchChange={setSearch}
           isAdmin={isAdmin}
-          onScanClick={() => setShowScan(true)}
-          onArpClick={handleArpImport}
-          onAddDevice={() => setShowAddDevice(true)}
-          onFitView={() => fitViewFn.current?.()}
-          onReset={handleReset}
-          arpLoading={importArp.isPending}
+          onAddGroup={() => setShowAddGroup(true)}
+          onDeleteGroup={handleDeleteGroup}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={toggleGroupCollapse}
         />
-        <div className="flex flex-1 overflow-hidden">
-          <TopologyLeftSidebar
-            groups={groups}
-            search={search}
-            onSearchChange={setSearch}
-            isAdmin={isAdmin}
-            onAddGroup={() => setShowAddGroup(true)}
-            onDeleteGroup={handleDeleteGroup}
-            collapsedGroups={collapsedGroups}
-            onToggleGroup={toggleGroupCollapse}
-          />
-          <div className="flex-1 overflow-hidden h-full">
-            <TopologyCanvas
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onNodeClick={handleNodeClick}
-              onNodeDragStop={handleNodeDragStop}
-              onConnect={handleConnect}
-              onPaneClick={handlePaneClick}
-              fitViewRef={fn => { fitViewFn.current = fn }}
-            />
-          </div>
-          <TopologyRightPanel
-            device={selectedDevice}
-            connections={connections}
-            devices={devices}
-            isAdmin={isAdmin}
-            onClose={() => { setSelectedDeviceId(null); setFocusedNodeId(null) }}
-            onDeleteDevice={handleDeleteDevice}
-            onDeleteConnection={handleDeleteConnection}
-            onAddConnection={() => {
-              setPreselectedSourceId(selectedDeviceId ?? undefined)
-              setShowAddConnection(true)
-            }}
+        <div style={{ flex: 1, overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+          <TopologyCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={handleNodeClick}
+            onNodeDragStop={handleNodeDragStop}
+            onConnect={handleConnect}
+            onPaneClick={handlePaneClick}
+            fitViewRef={fn => { fitViewFn.current = fn }}
           />
         </div>
+        <TopologyRightPanel
+          device={selectedDevice}
+          connections={connections}
+          devices={devices}
+          isAdmin={isAdmin}
+          onClose={() => { setSelectedDeviceId(null); setFocusedNodeId(null) }}
+          onDeleteDevice={handleDeleteDevice}
+          onDeleteConnection={handleDeleteConnection}
+          onAddConnection={() => {
+            setPreselectedSourceId(selectedDeviceId ?? undefined)
+            setShowAddConnection(true)
+          }}
+        />
       </div>
 
       {/* Dialogs */}
@@ -348,7 +358,7 @@ export default function TopologyPage() {
         onImport={handleImportScan}
         importLoading={importScan.isPending}
       />
-    </Layout>
+    </div>
   )
 }
 
