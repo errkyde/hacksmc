@@ -52,6 +52,7 @@ export function TopologyCanvas({
   )
 
   return (
+    <div style={{ height: '100%', width: '100%' }}>
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -82,5 +83,6 @@ export function TopologyCanvas({
         }}
       />
     </ReactFlow>
+    </div>
   )
 }
