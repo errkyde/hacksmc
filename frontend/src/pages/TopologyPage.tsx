@@ -54,9 +54,11 @@ function TopologyInner() {
   const { toast } = useToast()
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const { data: groups = [] } = useTopologyGroups()
-  const { data: devices = [] } = useTopologyDevices()
-  const { data: connections = [] } = useTopologyConnections()
+  // Use undefined-safe refs — never inline `= []` here: a new [] on every render
+  // makes useMemo deps change every render → setNodes loop → React error #185.
+  const { data: groups } = useTopologyGroups()
+  const { data: devices } = useTopologyDevices()
+  const { data: connections } = useTopologyConnections()
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createDevice = useCreateTopologyDevice()
@@ -100,7 +102,7 @@ function TopologyInner() {
   const searchLower = search.toLowerCase()
 
   const rfNodes: Node[] = useMemo(() => {
-    const groupNodes: Node[] = groups.map(g => ({
+    const groupNodes: Node[] = (groups ?? []).map(g => ({
       id: `group-${g.id}`,
       type: 'groupNode',
       position: { x: 0, y: 0 },
@@ -118,12 +120,12 @@ function TopologyInner() {
     }))
 
     const filtered = search
-      ? devices.filter(d =>
+      ? (devices ?? []).filter(d =>
           d.name.toLowerCase().includes(searchLower) ||
           (d.ipAddress ?? '').toLowerCase().includes(searchLower) ||
           (d.hostname ?? '').toLowerCase().includes(searchLower),
         )
-      : devices
+      : (devices ?? [])
 
     const deviceNodes: Node[] = filtered.map(d => {
       const inGroup = d.groupId != null
@@ -138,7 +140,7 @@ function TopologyInner() {
         selected: String(d.id) === String(selectedDeviceId),
         data: {
           device: d,
-          dimmed: focusedNodeId !== null && focusedNodeId !== String(d.id) && !isConnectedTo(focusedNodeId, String(d.id), connections),
+          dimmed: focusedNodeId !== null && focusedNodeId !== String(d.id) && !isConnectedTo(focusedNodeId, String(d.id), connections ?? []),
         },
         zIndex: 1,
       }
@@ -149,7 +151,7 @@ function TopologyInner() {
   }, [groups, devices, collapsedGroups, search, selectedDeviceId, focusedNodeId, connections])
 
   const rfEdges: Edge[] = useMemo(() =>
-    connections.map(c => {
+    (connections ?? []).map(c => {
       const label = c.label ?? (c.protocol && c.portStart
         ? `${c.protocol}:${c.portStart}${c.portEnd && c.portEnd !== c.portStart ? `-${c.portEnd}` : ''}`
         : undefined)
@@ -278,7 +280,7 @@ function TopologyInner() {
   }
 
   const selectedDevice = selectedDeviceId != null
-    ? (devices.find(d => d.id === selectedDeviceId) ?? null)
+    ? ((devices ?? []).find(d => d.id === selectedDeviceId) ?? null)
     : null
 
   return (
@@ -294,7 +296,7 @@ function TopologyInner() {
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <TopologyLeftSidebar
-          groups={groups}
+          groups={groups ?? []}
           search={search}
           onSearchChange={setSearch}
           isAdmin={isAdmin}
@@ -318,8 +320,8 @@ function TopologyInner() {
         </div>
         <TopologyRightPanel
           device={selectedDevice}
-          connections={connections}
-          devices={devices}
+          connections={connections ?? []}
+          devices={devices ?? []}
           isAdmin={isAdmin}
           onClose={() => { setSelectedDeviceId(null); setFocusedNodeId(null) }}
           onDeleteDevice={handleDeleteDevice}
@@ -335,7 +337,7 @@ function TopologyInner() {
       <AddDeviceDialog
         open={showAddDevice}
         onOpenChange={setShowAddDevice}
-        groups={groups}
+        groups={groups ?? []}
         onSubmit={data => createDevice.mutate(data, {
           onSuccess: () => toast({ title: 'Gerät erstellt' }),
           onError: () => toast({ title: 'Fehler beim Erstellen', variant: 'destructive' }),
@@ -345,7 +347,7 @@ function TopologyInner() {
       <AddConnectionDialog
         open={showAddConnection}
         onOpenChange={setShowAddConnection}
-        devices={devices}
+        devices={devices ?? []}
         preselectedSourceId={preselectedSourceId}
         onSubmit={data => createConn.mutate(data, {
           onSuccess: () => toast({ title: 'Verbindung erstellt' }),
