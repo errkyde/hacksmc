@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { X, Trash2, Plus, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -71,7 +70,7 @@ export function TopologyRightPanel({
           {device.hostname && <Row label="Hostname" value={device.hostname} />}
           {device.description && <Row label="Beschreibung" value={device.description} />}
           <Row label="Geteilt" value={device.isShared ? 'Ja' : 'Nein'} />
-          {device.natRuleId !== undefined && device.hostId && (
+          {device.hostId && (
             <div className="flex items-center gap-1">
               <Badge variant="secondary" className="text-[10px]">Verknüpft mit Host #{device.hostId}</Badge>
             </div>
@@ -180,7 +179,7 @@ function ConnectionRow({
         {peer} <span className="text-muted-foreground">({label})</span>
       </span>
       {natRuleId && (
-        <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" title={`NAT Rule #${natRuleId}`} />
+        <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`NAT Rule #${natRuleId}`} />
       )}
       {isAdmin && (
         <button

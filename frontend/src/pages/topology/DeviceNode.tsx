@@ -1,9 +1,9 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Server, Shield, Network, Globe, HelpCircle, Printer, Router } from 'lucide-react'
+import { Server, Shield, Network, Globe, HelpCircle, Printer, Router, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { NetworkDeviceDto, DeviceType } from '@/hooks/useTopology'
 
-const TYPE_CONFIG: Record<DeviceType, { color: string; Icon: React.FC<{ className?: string }> }> = {
+const TYPE_CONFIG: Record<DeviceType, { color: string; Icon: LucideIcon }> = {
   HOST:     { color: '#3b82f6', Icon: Server },
   ROUTER:   { color: '#f97316', Icon: Router },
   FIREWALL: { color: '#ef4444', Icon: Shield },

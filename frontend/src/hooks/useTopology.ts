@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import { api } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -96,21 +96,21 @@ export interface CreateConnectionInput {
 export function useTopologyGroups() {
   return useQuery<NetworkGroupDto[]>({
     queryKey: ['topology', 'groups'],
-    queryFn: () => api.get('/api/topology/groups').then(r => r.data),
+    queryFn: () => api.get<NetworkGroupDto[]>('/api/topology/groups').then(r => r.data),
   })
 }
 
 export function useTopologyDevices() {
   return useQuery<NetworkDeviceDto[]>({
     queryKey: ['topology', 'devices'],
-    queryFn: () => api.get('/api/topology/devices').then(r => r.data),
+    queryFn: () => api.get<NetworkDeviceDto[]>('/api/topology/devices').then(r => r.data),
   })
 }
 
 export function useTopologyConnections() {
   return useQuery<NetworkConnectionDto[]>({
     queryKey: ['topology', 'connections'],
-    queryFn: () => api.get('/api/topology/connections').then(r => r.data),
+    queryFn: () => api.get<NetworkConnectionDto[]>('/api/topology/connections').then(r => r.data),
   })
 }
 
@@ -143,7 +143,7 @@ export function useSaveDevicePosition() {
 export function useAdminTopologyGroups() {
   return useQuery<NetworkGroupDto[]>({
     queryKey: ['admin', 'topology', 'groups'],
-    queryFn: () => api.get('/api/admin/topology/groups').then(r => r.data),
+    queryFn: () => api.get<NetworkGroupDto[]>('/api/admin/topology/groups').then(r => r.data),
   })
 }
 
@@ -185,7 +185,7 @@ export function useDeleteTopologyGroup() {
 export function useAdminTopologyDevices() {
   return useQuery<NetworkDeviceDto[]>({
     queryKey: ['admin', 'topology', 'devices'],
-    queryFn: () => api.get('/api/admin/topology/devices').then(r => r.data),
+    queryFn: () => api.get<NetworkDeviceDto[]>('/api/admin/topology/devices').then(r => r.data),
   })
 }
 
@@ -251,7 +251,7 @@ export function useImportArpTable() {
 export function useAdminTopologyConnections() {
   return useQuery<NetworkConnectionDto[]>({
     queryKey: ['admin', 'topology', 'connections'],
-    queryFn: () => api.get('/api/admin/topology/connections').then(r => r.data),
+    queryFn: () => api.get<NetworkConnectionDto[]>('/api/admin/topology/connections').then(r => r.data),
   })
 }
 

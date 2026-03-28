@@ -25,7 +25,6 @@ import {
   useUpdateTopologyGroup,
   useImportScanToTopology,
   useImportArpTable,
-  type NetworkDeviceDto,
   type NetworkConnectionDto,
 } from '@/hooks/useTopology'
 import { TopologyToolbar } from './topology/TopologyToolbar'
@@ -237,14 +236,14 @@ export default function TopologyPage() {
 
   function handleImportScan(scanned: ScannedHost[]) {
     importScan.mutate(scanned, {
-      onSuccess: (data) => toast({ title: `${data.imported} Gerät(e) importiert` }),
+      onSuccess: (data: { imported: number }) => toast({ title: `${data.imported} Gerät(e) importiert` }),
       onError: () => toast({ title: 'Fehler', description: 'Import fehlgeschlagen.', variant: 'destructive' }),
     })
   }
 
   function handleArpImport() {
     importArp.mutate(undefined, {
-      onSuccess: (data) => toast({ title: `${data.upserted} Gerät(e) aus ARP importiert` }),
+      onSuccess: (data: { upserted: number }) => toast({ title: `${data.upserted} Gerät(e) aus ARP importiert` }),
       onError: () => toast({ title: 'ARP-Import fehlgeschlagen', variant: 'destructive' }),
     })
   }

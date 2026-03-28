@@ -9,6 +9,8 @@ import {
   type NodeTypes,
   type OnNodeDrag,
   type OnConnect,
+  type OnNodesChange,
+  type OnEdgesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { DeviceNode } from './DeviceNode'
@@ -22,8 +24,8 @@ const nodeTypes: NodeTypes = {
 interface Props {
   nodes: Node[]
   edges: Edge[]
-  onNodesChange: (changes: unknown) => void
-  onEdgesChange: (changes: unknown) => void
+  onNodesChange: OnNodesChange<Node>
+  onEdgesChange: OnEdgesChange<Edge>
   onNodeClick: (event: React.MouseEvent, node: Node) => void
   onNodeDragStop: OnNodeDrag
   onConnect: OnConnect
@@ -53,8 +55,8 @@ export function TopologyCanvas({
     <ReactFlow
       nodes={nodes}
       edges={edges}
-      onNodesChange={onNodesChange as never}
-      onEdgesChange={onEdgesChange as never}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
