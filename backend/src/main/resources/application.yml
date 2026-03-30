@@ -1,4 +1,9 @@
 spring:
+  main:
+    lazy-initialization: true
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${PORT_POSTGRES:5432}/${DB_NAME:hacksmc}
     username: ${DB_USER:hacksmc}
