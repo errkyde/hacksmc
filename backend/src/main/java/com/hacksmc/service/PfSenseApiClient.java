@@ -37,8 +37,10 @@ import java.util.stream.IntStream;
 @Slf4j
 public class PfSenseApiClient {
 
-    /** Tag format embedded in pfSense rule descriptions. */
+    /** Tag format embedded in pfSense NAT rule descriptions. */
     private static final String TAG_PREFIX = "[hsmc:";
+    /** Tag format embedded in pfSense firewall rule descriptions. */
+    private static final String FW_TAG_PREFIX = "[hsmc-fw:";
     private static final String TAG_SUFFIX = "]";
 
     private final RestClient restClient;
@@ -128,6 +130,107 @@ public class PfSenseApiClient {
         }
 
         applyChanges();
+    }
+
+    /**
+     * Creates an inbound firewall PASS rule on the given pfSense interface.
+     * Source = any, destination = targetIp:port. Embeds [hsmc-fw:{connectionId}] in description.
+     *
+     * @param pfSenseInterface  the pfSense interface name (e.g. "opt1", "lan")
+     * @param targetIp          destination IP address
+     * @param protocol          "tcp", "udp", "icmp", or null → "any"
+     * @param portStart         null → "any" for destination port
+     * @param portEnd           null → same as portStart
+     * @param connectionId      DB id of the NetworkConnection (stable tag)
+     * @return String.valueOf(connectionId) as the stable firewallRuleId
+     */
+    public String createFirewallRule(String pfSenseInterface, String targetIp,
+                                     String protocol, Integer portStart, Integer portEnd,
+                                     Long connectionId) {
+        String tag = FW_TAG_PREFIX + connectionId + TAG_SUFFIX;
+        String descr = "[hsmc-fw] " + targetIp + " " + tag;
+
+        String portStr = null;
+        if (portStart != null) {
+            int end = portEnd != null ? portEnd : portStart;
+            portStr = portStart.equals(end) ? String.valueOf(portStart) : portStart + ":" + end;
+        }
+
+        log.info("Creating pfSense firewall rule: iface={} dst={}:{}/{} descr={}",
+                pfSenseInterface, targetIp, portStr, protocol, descr);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("interface", pfSenseInterface);
+        body.put("type", "pass");
+        body.put("ipprotocol", "inet");
+        body.put("protocol", protocol != null ? protocol.toLowerCase() : "any");
+        body.put("src", "any");
+        body.put("dst", targetIp);
+        body.put("dstport", portStr != null ? portStr : "any");
+        body.put("descr", descr);
+        body.put("disabled", false);
+
+        try {
+            restClient.post()
+                    .uri("/api/v2/firewall/rules")
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.error("pfSense createFirewallRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
+
+        applyChanges();
+        return String.valueOf(connectionId);
+    }
+
+    /**
+     * Deletes a firewall rule from pfSense by its stored firewallRuleId (= our DB connection ID).
+     * Locates the rule by searching descriptions for [hsmc-fw:{firewallRuleId}].
+     */
+    public void deleteFirewallRule(String firewallRuleId) {
+        log.info("Deleting pfSense firewall rule with hsmc-fw-id: {}", firewallRuleId);
+        int arrayId = findFwArrayIdByHsmcId(firewallRuleId);
+        log.info("Resolved hsmc-fw-id {} to array index {}", firewallRuleId, arrayId);
+        try {
+            restClient.method(org.springframework.http.HttpMethod.DELETE)
+                    .uri("/api/v2/firewall/rules")
+                    .body(Map.of("id", arrayId))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.error("pfSense deleteFirewallRule failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
+        applyChanges();
+    }
+
+    private int findFwArrayIdByHsmcId(String hsmcId) {
+        List<Map<String, Object>> rules = fetchAllFirewallRules();
+        for (int i = 0; i < rules.size(); i++) {
+            String descr = (String) rules.get(i).get("descr");
+            if (descr != null && descr.contains(FW_TAG_PREFIX + hsmcId + TAG_SUFFIX)) {
+                return i;
+            }
+        }
+        throw new PfSenseException("Firewall-Regel [hsmc-fw:" + hsmcId + "] nicht in pfSense gefunden", null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fetchAllFirewallRules() {
+        Map<String, Object> response;
+        try {
+            response = restClient.get()
+                    .uri("/api/v2/firewall/rules")
+                    .retrieve()
+                    .body(Map.class);
+        } catch (Exception e) {
+            log.error("pfSense fetchAllFirewallRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            throw new PfSenseException(humanReadable(e), e);
+        }
+        if (response == null || !response.containsKey("data")) return List.of();
+        return (List<Map<String, Object>>) response.get("data");
     }
 
     /**
@@ -228,14 +331,58 @@ public class PfSenseApiClient {
             log.error("pfSense fetchArpTable failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
-        if (response == null || !response.containsKey("data")) return List.of();
-        List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
-        return data.stream().map(entry -> new ArpEntryDto(
-                (String) entry.get("ip"),
-                (String) entry.get("mac"),
-                (String) entry.get("interface"),
-                (String) entry.get("hostname")
-        )).toList();
+        if (response == null) {
+            log.warn("fetchArpTable: null response");
+            return List.of();
+        }
+        log.debug("fetchArpTable raw response keys: {}", response.keySet());
+
+        // pfREST v2 can return either a direct list or a paginated wrapper
+        Object dataRaw = response.get("data");
+        if (dataRaw == null) {
+            log.warn("fetchArpTable: 'data' key missing. Response: {}", response);
+            return List.of();
+        }
+
+        List<Map<String, Object>> entries;
+        if (dataRaw instanceof List<?> list) {
+            entries = (List<Map<String, Object>>) list;
+        } else if (dataRaw instanceof Map<?, ?> dataMap) {
+            // Paginated: { "items": [...], "total": N, "returned": N }
+            Object items = ((Map<String, Object>) dataMap).get("items");
+            if (items instanceof List<?> itemList) {
+                entries = (List<Map<String, Object>>) itemList;
+            } else {
+                log.warn("fetchArpTable: unexpected paginated structure: {}", dataMap.keySet());
+                return List.of();
+            }
+        } else {
+            log.warn("fetchArpTable: unexpected data type: {}", dataRaw.getClass());
+            return List.of();
+        }
+
+        if (entries.isEmpty()) {
+            log.info("fetchArpTable: empty ARP table returned from pfSense");
+            return List.of();
+        }
+        log.info("fetchArpTable: {} entries, first entry keys: {}", entries.size(), entries.get(0).keySet());
+
+        return entries.stream().map(entry -> {
+            // Handle both possible field name variants from different pfSense REST versions
+            String ip  = firstNonNull(entry, "ip", "ip_addr", "ipaddr");
+            String mac = firstNonNull(entry, "mac", "mac_addr", "macaddr");
+            String iface = firstNonNull(entry, "interface", "intf", "if");
+            String hostname = firstNonNull(entry, "hostname", "host", "dnsresolve");
+            return new ArpEntryDto(ip, mac, iface, hostname);
+        }).toList();
+    }
+
+    private static String firstNonNull(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            Object val = map.get(key);
+            if (val instanceof String s && !s.isBlank()) return s;
+        }
+        return null;
     }
 
     /** Quick connectivity check against pfSense via TCP connect. Result cached for 5 minutes. */
