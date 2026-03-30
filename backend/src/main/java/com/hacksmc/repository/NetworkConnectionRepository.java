@@ -15,4 +15,6 @@ public interface NetworkConnectionRepository extends JpaRepository<NetworkConnec
 
     @Query("SELECT c FROM NetworkConnection c WHERE c.source.id = :deviceId OR c.target.id = :deviceId ORDER BY c.createdAt ASC")
     List<NetworkConnection> findByDeviceId(@Param("deviceId") Long deviceId);
+
+    boolean existsBySourceIdAndTargetIdAndPortStart(Long sourceId, Long targetId, Integer portStart);
 }

@@ -26,6 +26,7 @@ import {
   useUpdateTopologyGroup,
   useImportScanToTopology,
   useImportArpTable,
+  useImportNatConnections,
   type NetworkConnectionDto,
 } from '@/hooks/useTopology'
 import { TopologyToolbar } from './topology/TopologyToolbar'
@@ -71,6 +72,7 @@ function TopologyInner() {
   const savePosition = useSaveDevicePosition()
   const importScan = useImportScanToTopology()
   const importArp = useImportArpTable()
+  const importNat = useImportNatConnections()
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null)
@@ -267,8 +269,16 @@ function TopologyInner() {
 
   function handleArpImport() {
     importArp.mutate(undefined, {
-      onSuccess: (data: { upserted: number }) => toast({ title: `${data.upserted} Gerät(e) aus ARP importiert` }),
+      onSuccess: (data: { upserted: number }) => toast({ title: `ARP Import: ${data.upserted} Gerät(e) aktualisiert/erstellt` }),
       onError: () => toast({ title: 'ARP-Import fehlgeschlagen', variant: 'destructive' }),
+    })
+  }
+
+  function handleNatImport() {
+    importNat.mutate(undefined, {
+      onSuccess: (data: { imported: number }) =>
+        toast({ title: `NAT Import: ${data.imported} neue Verbindung(en) erstellt` }),
+      onError: () => toast({ title: 'NAT-Import fehlgeschlagen', variant: 'destructive' }),
     })
   }
 
@@ -289,10 +299,12 @@ function TopologyInner() {
         isAdmin={isAdmin}
         onScanClick={() => setShowScan(true)}
         onArpClick={handleArpImport}
+        onNatImportClick={handleNatImport}
         onAddDevice={() => setShowAddDevice(true)}
         onFitView={() => fitViewFn.current?.()}
         onReset={handleReset}
         arpLoading={importArp.isPending}
+        natImportLoading={importNat.isPending}
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <TopologyLeftSidebar

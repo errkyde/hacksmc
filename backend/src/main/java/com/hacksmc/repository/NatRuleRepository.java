@@ -37,4 +37,7 @@ public interface NatRuleRepository extends JpaRepository<NatRule, Long> {
 
     @Query("SELECT r FROM NatRule r JOIN FETCH r.user JOIN FETCH r.host ORDER BY r.createdAt DESC")
     List<NatRule> findAllWithUserAndHost();
+
+    @Query("SELECT r FROM NatRule r JOIN FETCH r.host WHERE r.status = com.hacksmc.entity.NatRuleStatus.ACTIVE")
+    List<NatRule> findActiveWithHost();
 }

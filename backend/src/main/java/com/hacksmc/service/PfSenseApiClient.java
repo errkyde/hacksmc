@@ -385,6 +385,42 @@ public class PfSenseApiClient {
         return null;
     }
 
+    /**
+     * Returns a map of pfSense interface internal name → human-readable description.
+     * e.g. { "em0" → "WAN", "igb0" → "LAN", "opt1" → "VLAN10" }
+     * Returns empty map on any error (non-critical, used for display only).
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, String> fetchInterfaceNames() {
+        try {
+            Map<String, Object> response = restClient.get()
+                    .uri("/api/v2/interface")
+                    .retrieve()
+                    .body(Map.class);
+            if (response == null) return Map.of();
+            Object dataRaw = response.get("data");
+            List<Map<String, Object>> interfaces;
+            if (dataRaw instanceof List<?> list) {
+                interfaces = (List<Map<String, Object>>) list;
+            } else if (dataRaw instanceof Map<?, ?> dataMap) {
+                Object items = ((Map<String, Object>) dataMap).get("items");
+                interfaces = items instanceof List<?> il ? (List<Map<String, Object>>) il : List.of();
+            } else return Map.of();
+
+            Map<String, String> result = new HashMap<>();
+            for (Map<String, Object> iface : interfaces) {
+                String ifName = firstNonNull(iface, "if", "ifname", "id");
+                String descr  = firstNonNull(iface, "descr", "description", "name");
+                if (ifName != null) result.put(ifName, descr != null ? descr : ifName.toUpperCase());
+            }
+            log.info("Fetched {} pfSense interface names", result.size());
+            return result;
+        } catch (Exception e) {
+            log.warn("Could not fetch pfSense interface list (non-critical): {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
     /** Quick connectivity check against pfSense via TCP connect. Result cached for 5 minutes. */
     public PfSenseStatusResponse checkHealth() {
         if (Instant.now().isBefore(cacheExpiry) && cachedStatus != null) {

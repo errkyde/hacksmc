@@ -102,4 +102,12 @@ public class NetworkTopologyAdminController {
         int upserted = topologyService.importArpTable();
         return Map.of("upserted", upserted);
     }
+
+    // ── NAT rules → topology connections ─────────────────────────────────────
+
+    @PostMapping("/scan/nat-connections")
+    public Map<String, Integer> importNatConnections() {
+        int imported = topologyService.importNatRulesAsConnections();
+        return Map.of("imported", imported);
+    }
 }

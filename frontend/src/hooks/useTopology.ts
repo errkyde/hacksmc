@@ -30,6 +30,7 @@ export interface NetworkDeviceDto {
   hostId: number | null
   createdAt: string
   updatedAt: string
+  pfSenseInterface: string | null
 }
 
 export interface NetworkConnectionDto {
@@ -42,6 +43,7 @@ export interface NetworkConnectionDto {
   label: string | null
   status: string
   natRuleId: number | null
+  firewallRuleId: string | null
   createdAt: string
 }
 
@@ -80,6 +82,7 @@ export interface PatchDeviceInput {
   posX?: number
   posY?: number
   isShared?: boolean
+  pfSenseInterface?: string | null
 }
 
 export interface CreateConnectionInput {
@@ -247,6 +250,22 @@ export function useImportArpTable() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
+      qc.invalidateQueries({ queryKey: ['topology', 'groups'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'topology', 'groups'] })
+    },
+  })
+}
+
+export function useImportNatConnections() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ imported: number }>('/api/admin/topology/scan/nat-connections').then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['topology', 'connections'] })
+      qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'topology', 'connections'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
     },
   })
 }

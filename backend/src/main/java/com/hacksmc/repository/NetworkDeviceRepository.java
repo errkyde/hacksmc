@@ -12,6 +12,7 @@ public interface NetworkDeviceRepository extends JpaRepository<NetworkDevice, Lo
     List<NetworkDevice> findAllByOrderByCreatedAtAsc();
     boolean existsByIpAddress(String ipAddress);
     Optional<NetworkDevice> findByIpAddress(String ipAddress);
+    Optional<NetworkDevice> findFirstByName(String name);
 
     @Query("SELECT d FROM NetworkDevice d WHERE d.host.id IN :hostIds OR d.isShared = true ORDER BY d.createdAt ASC")
     List<NetworkDevice> findVisibleForHosts(@Param("hostIds") List<Long> hostIds);

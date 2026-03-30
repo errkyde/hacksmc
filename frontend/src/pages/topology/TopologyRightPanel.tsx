@@ -1,4 +1,4 @@
-import { X, Trash2, Plus, ExternalLink } from 'lucide-react'
+import { X, Trash2, Plus, ExternalLink, Shield, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { NetworkDeviceDto, NetworkConnectionDto } from '@/hooks/useTopology'
@@ -75,6 +75,15 @@ export function TopologyRightPanel({
               <Badge variant="secondary" className="text-[10px]">Verknüpft mit Host #{device.hostId}</Badge>
             </div>
           )}
+          {isAdmin && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">FW Interface</span>
+              {device.pfSenseInterface
+                ? <span className="font-mono text-emerald-500">{device.pfSenseInterface}</span>
+                : <span className="text-amber-500 font-mono">nicht gesetzt — FW-Regeln inaktiv</span>
+              }
+            </div>
+          )}
         </div>
 
         {/* Outbound connections */}
@@ -97,6 +106,7 @@ export function TopologyRightPanel({
               peer={getDeviceName(c.targetDeviceId)}
               status={c.status}
               natRuleId={c.natRuleId}
+              firewallRuleId={c.firewallRuleId}
               onDelete={() => onDeleteConnection(c.id)}
               isAdmin={isAdmin}
             />
@@ -120,6 +130,7 @@ export function TopologyRightPanel({
               peer={getDeviceName(c.sourceDeviceId)}
               status={c.status}
               natRuleId={c.natRuleId}
+              firewallRuleId={c.firewallRuleId}
               onDelete={() => onDeleteConnection(c.id)}
               isAdmin={isAdmin}
             />
@@ -159,6 +170,7 @@ function ConnectionRow({
   peer,
   status,
   natRuleId,
+  firewallRuleId,
   onDelete,
   isAdmin,
 }: {
@@ -166,6 +178,7 @@ function ConnectionRow({
   peer: string
   status: string
   natRuleId: number | null
+  firewallRuleId: string | null
   onDelete: () => void
   isAdmin: boolean
 }) {
@@ -178,6 +191,11 @@ function ConnectionRow({
       <span className="flex-1 truncate">
         {peer} <span className="text-muted-foreground">({label})</span>
       </span>
+      {firewallRuleId ? (
+        <Shield className="h-3 w-3 text-green-500 shrink-0" aria-label="Firewall-Regel aktiv" />
+      ) : status === 'ISSUE' ? (
+        <ShieldAlert className="h-3 w-3 text-destructive shrink-0" aria-label="Keine Firewall-Regel" />
+      ) : null}
       {natRuleId && (
         <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`NAT Rule #${natRuleId}`} />
       )}
