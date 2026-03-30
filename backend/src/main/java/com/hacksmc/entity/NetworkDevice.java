@@ -53,6 +53,9 @@ public class NetworkDevice {
     @JoinColumn(name = "host_id")
     private Host host;
 
+    @Column(name = "pf_sense_interface")
+    private String pfSenseInterface;
+
     @Column(nullable = false)
     private Instant createdAt;
 

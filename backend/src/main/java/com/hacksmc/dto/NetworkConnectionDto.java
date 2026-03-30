@@ -12,5 +12,6 @@ public record NetworkConnectionDto(
         String label,
         String status,
         Long natRuleId,
+        String firewallRuleId,
         Instant createdAt
 ) {}

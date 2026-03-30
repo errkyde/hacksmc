@@ -42,6 +42,9 @@ public class NetworkConnection {
     @JoinColumn(name = "nat_rule_id")
     private NatRule natRule;
 
+    @Column(name = "firewall_rule_id")
+    private String firewallRuleId;
+
     @Column(nullable = false)
     private Instant createdAt;
 

@@ -7,5 +7,6 @@ public record PatchNetworkDeviceRequest(
         Long groupId,
         Double posX,
         Double posY,
-        Boolean isShared
+        Boolean isShared,
+        String pfSenseInterface
 ) {}

@@ -17,5 +17,6 @@ public record NetworkDeviceDto(
         boolean isShared,
         Long hostId,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String pfSenseInterface
 ) {}
