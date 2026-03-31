@@ -17,8 +17,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        temp:
-          use_jdbc_metadata_defaults: false
   flyway:
     enabled: true
     locations: classpath:db/migration
