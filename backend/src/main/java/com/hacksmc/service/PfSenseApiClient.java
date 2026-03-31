@@ -335,12 +335,12 @@ public class PfSenseApiClient {
             log.warn("fetchArpTable: null response");
             return List.of();
         }
-        log.debug("fetchArpTable raw response keys: {}", response.keySet());
+        log.info("fetchArpTable raw response keys: {}", response.keySet());
 
         // pfREST v2 can return either a direct list or a paginated wrapper
         Object dataRaw = response.get("data");
         if (dataRaw == null) {
-            log.warn("fetchArpTable: 'data' key missing. Response: {}", response);
+            log.warn("fetchArpTable: 'data' key missing. Full response: {}", response);
             return List.of();
         }
 
@@ -365,7 +365,7 @@ public class PfSenseApiClient {
             log.info("fetchArpTable: empty ARP table returned from pfSense");
             return List.of();
         }
-        log.info("fetchArpTable: {} entries, first entry keys: {}", entries.size(), entries.get(0).keySet());
+        log.info("fetchArpTable: {} entries, first entry: {}", entries.size(), entries.get(0));
 
         return entries.stream().map(entry -> {
             // Handle both possible field name variants from different pfSense REST versions

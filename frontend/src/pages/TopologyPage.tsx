@@ -23,7 +23,6 @@ import {
   useDeleteTopologyDevice,
   useDeleteTopologyGroup,
   useCreateTopologyGroup,
-  useUpdateTopologyGroup,
   useImportScanToTopology,
   useImportArpTable,
   useImportNatConnections,
@@ -55,8 +54,6 @@ function TopologyInner() {
   const { toast } = useToast()
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  // Use undefined-safe refs — never inline `= []` here: a new [] on every render
-  // makes useMemo deps change every render → setNodes loop → React error #185.
   const { data: groups } = useTopologyGroups()
   const { data: devices } = useTopologyDevices()
   const { data: connections } = useTopologyConnections()
@@ -66,7 +63,6 @@ function TopologyInner() {
   const deleteDevice = useDeleteTopologyDevice()
   const createGroup = useCreateTopologyGroup()
   const deleteGroup = useDeleteTopologyGroup()
-  const updateGroup = useUpdateTopologyGroup()
   const createConn = useCreateConnection()
   const deleteConn = useDeleteConnection()
   const savePosition = useSaveDevicePosition()
@@ -77,7 +73,7 @@ function TopologyInner() {
   // ── UI State ──────────────────────────────────────────────────────────────
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set())
+  const [focusedGroupId, setFocusedGroupId] = useState<number | null>(null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
 
   const [showAddDevice, setShowAddDevice] = useState(false)
@@ -88,78 +84,62 @@ function TopologyInner() {
 
   const fitViewFn = useRef<(() => void) | null>(null)
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  function toggleGroupCollapse(groupId: number) {
-    const willCollapse = !collapsedGroups.has(groupId)
-    setCollapsedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(groupId)) next.delete(groupId)
-      else next.add(groupId)
-      return next
-    })
-    updateGroup.mutate({ id: groupId, data: { collapsed: willCollapse } })
-  }
+  // ── Group color lookup ────────────────────────────────────────────────────
+  const groupColorMap = useMemo(() => {
+    const map = new Map<number, string>()
+    ;(groups ?? []).forEach(g => map.set(g.id, g.color))
+    return map
+  }, [groups])
 
   // ── Node/Edge transforms ──────────────────────────────────────────────────
   const searchLower = search.toLowerCase()
 
   const rfNodes: Node[] = useMemo(() => {
-    const groupNodes: Node[] = (groups ?? []).map(g => ({
-      id: `group-${g.id}`,
-      type: 'groupNode',
-      position: { x: 0, y: 0 },
-      data: {
-        group: { ...g, collapsed: collapsedGroups.has(g.id) },
-        onToggleCollapse: (id: number) => toggleGroupCollapse(id),
-      },
-      style: {
-        width: 300,
-        height: 200,
-        backgroundColor: g.color + '18',
-        border: `2px solid ${g.color}`,
-      },
-      zIndex: 0,
-    }))
-
+    const allDevices = devices ?? []
     const filtered = search
-      ? (devices ?? []).filter(d =>
+      ? allDevices.filter(d =>
           d.name.toLowerCase().includes(searchLower) ||
           (d.ipAddress ?? '').toLowerCase().includes(searchLower) ||
           (d.hostname ?? '').toLowerCase().includes(searchLower),
         )
-      : (devices ?? [])
+      : allDevices
 
-    const deviceNodes: Node[] = filtered.map(d => {
-      const inGroup = d.groupId != null
-      const groupCollapsed = d.groupId != null && collapsedGroups.has(d.groupId)
+    // If a group is focused in the sidebar, show only its devices (dim others)
+    return filtered.map(d => {
+      const groupColor = d.groupId != null ? groupColorMap.get(d.groupId) : undefined
+      const inFocusedGroup = focusedGroupId === null || d.groupId === focusedGroupId
+      const dimmedByGroup = !inFocusedGroup
+      const dimmedByNode = focusedNodeId !== null &&
+        focusedNodeId !== String(d.id) &&
+        !isConnectedTo(focusedNodeId, String(d.id), connections ?? [])
       return {
         id: String(d.id),
         type: 'deviceNode',
         position: { x: d.posX, y: d.posY },
-        parentId: inGroup ? `group-${d.groupId}` : undefined,
-        extent: inGroup ? ('parent' as const) : undefined,
-        hidden: groupCollapsed,
         selected: String(d.id) === String(selectedDeviceId),
         data: {
           device: d,
-          dimmed: focusedNodeId !== null && focusedNodeId !== String(d.id) && !isConnectedTo(focusedNodeId, String(d.id), connections ?? []),
+          groupColor,
+          dimmed: dimmedByGroup || dimmedByNode,
         },
-        zIndex: 1,
       }
     })
-
-    return [...groupNodes, ...deviceNodes]
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, devices, collapsedGroups, search, selectedDeviceId, focusedNodeId, connections])
+  }, [devices, groupColorMap, focusedGroupId, search, selectedDeviceId, focusedNodeId, connections])
 
   const rfEdges: Edge[] = useMemo(() =>
     (connections ?? []).map(c => {
       const label = c.label ?? (c.protocol && c.portStart
         ? `${c.protocol}:${c.portStart}${c.portEnd && c.portEnd !== c.portStart ? `-${c.portEnd}` : ''}`
         : undefined)
-      const dimmed = focusedNodeId !== null &&
+      const dimmedByNode = focusedNodeId !== null &&
         focusedNodeId !== String(c.sourceDeviceId) &&
         focusedNodeId !== String(c.targetDeviceId)
+      const dimmedByGroup = focusedGroupId !== null && (() => {
+        const srcDevice = (devices ?? []).find(d => d.id === c.sourceDeviceId)
+        const tgtDevice = (devices ?? []).find(d => d.id === c.targetDeviceId)
+        return srcDevice?.groupId !== focusedGroupId && tgtDevice?.groupId !== focusedGroupId
+      })()
       return {
         id: String(c.id),
         source: String(c.sourceDeviceId),
@@ -168,20 +148,19 @@ function TopologyInner() {
         labelStyle: { fontSize: 10 },
         style: {
           stroke: c.status === 'OK' ? '#22c55e' : c.status === 'ISSUE' ? '#ef4444' : '#64748b',
-          opacity: dimmed ? 0.15 : 1,
+          opacity: dimmedByNode || dimmedByGroup ? 0.15 : 1,
           strokeWidth: 1.5,
         },
         animated: c.natRuleId != null && c.status === 'OK',
         data: { connection: c },
       }
     }),
-    [connections, focusedNodeId],
+    [connections, focusedNodeId, focusedGroupId, devices],
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
-  // Sync RF state when data changes (useEffect, not useMemo — side effects must not run during render)
   useEffect(() => { setNodes(rfNodes) }, [rfNodes, setNodes])
   useEffect(() => { setEdges(rfEdges) }, [rfEdges, setEdges])
 
@@ -256,6 +235,9 @@ function TopologyInner() {
 
   function handleDeleteGroup(id: number) {
     deleteGroup.mutate(id, {
+      onSuccess: () => {
+        if (focusedGroupId === id) setFocusedGroupId(null)
+      },
       onError: () => toast({ title: 'Fehler', description: 'Gruppe konnte nicht gelöscht werden.', variant: 'destructive' }),
     })
   }
@@ -270,7 +252,10 @@ function TopologyInner() {
   function handleArpImport() {
     importArp.mutate(undefined, {
       onSuccess: (data: { upserted: number }) => toast({ title: `ARP Import: ${data.upserted} Gerät(e) aktualisiert/erstellt` }),
-      onError: () => toast({ title: 'ARP-Import fehlgeschlagen', variant: 'destructive' }),
+      onError: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Unbekannter Fehler'
+        toast({ title: 'ARP-Import fehlgeschlagen', description: msg, variant: 'destructive' })
+      },
     })
   }
 
@@ -285,6 +270,7 @@ function TopologyInner() {
   function handleReset() {
     setSearch('')
     setFocusedNodeId(null)
+    setFocusedGroupId(null)
     setSelectedDeviceId(null)
     fitViewFn.current?.()
   }
@@ -314,8 +300,8 @@ function TopologyInner() {
           isAdmin={isAdmin}
           onAddGroup={() => setShowAddGroup(true)}
           onDeleteGroup={handleDeleteGroup}
-          collapsedGroups={collapsedGroups}
-          onToggleGroup={toggleGroupCollapse}
+          focusedGroupId={focusedGroupId}
+          onFocusGroup={setFocusedGroupId}
         />
         <div style={{ flex: 1, overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
           <TopologyCanvas

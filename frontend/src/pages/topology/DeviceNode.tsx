@@ -17,6 +17,7 @@ export interface DeviceNodeData {
   device: NetworkDeviceDto
   selected?: boolean
   dimmed?: boolean
+  groupColor?: string
 }
 
 export function DeviceNode({ data, selected }: NodeProps) {
@@ -37,12 +38,18 @@ export function DeviceNode({ data, selected }: NodeProps) {
     >
       <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-muted-foreground" />
       <Icon className="h-4 w-4 shrink-0" style={{ color: cfg.color }} />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium leading-tight">{device.name}</p>
         {device.ipAddress && (
           <p className="truncate text-[10px] text-muted-foreground leading-tight">{device.ipAddress}</p>
         )}
       </div>
+      {d.groupColor && (
+        <span
+          className="absolute top-1 right-1.5 h-2 w-2 rounded-full shrink-0"
+          style={{ background: d.groupColor }}
+        />
+      )}
       <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-muted-foreground" />
     </div>
   )

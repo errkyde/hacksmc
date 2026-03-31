@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   type Node,
   type Edge,
   type NodeTypes,
@@ -14,11 +13,9 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { DeviceNode } from './DeviceNode'
-import { GroupNode } from './GroupNode'
 
 const nodeTypes: NodeTypes = {
   deviceNode: DeviceNode as unknown as NodeTypes[string],
-  groupNode: GroupNode as unknown as NodeTypes[string],
 }
 
 interface Props {
@@ -75,13 +72,6 @@ export function TopologyCanvas({
     >
       <Background gap={16} size={1} className="opacity-30" />
       <Controls className="!bg-card !border-border !text-foreground [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
-      <MiniMap
-        className="!bg-card !border-border"
-        nodeColor={node => {
-          if (node.type === 'groupNode') return '#334155'
-          return '#3b82f6'
-        }}
-      />
     </ReactFlow>
     </div>
   )

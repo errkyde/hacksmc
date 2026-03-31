@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -12,8 +12,8 @@ interface Props {
   isAdmin: boolean
   onAddGroup: () => void
   onDeleteGroup: (id: number) => void
-  collapsedGroups: Set<number>
-  onToggleGroup: (id: number) => void
+  focusedGroupId: number | null
+  onFocusGroup: (id: number | null) => void
 }
 
 export function TopologyLeftSidebar({
@@ -23,8 +23,8 @@ export function TopologyLeftSidebar({
   isAdmin,
   onAddGroup,
   onDeleteGroup,
-  collapsedGroups,
-  onToggleGroup,
+  focusedGroupId,
+  onFocusGroup,
 }: Props) {
   return (
     <div className="flex w-52 shrink-0 flex-col border-r bg-background">
@@ -49,13 +49,24 @@ export function TopologyLeftSidebar({
           )}
         </div>
 
+        <div
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer hover:bg-muted/50',
+            focusedGroupId === null && 'bg-muted/40 font-medium',
+          )}
+          onClick={() => onFocusGroup(null)}
+        >
+          <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-muted-foreground/40" />
+          <span className="flex-1 truncate text-muted-foreground">Alle anzeigen</span>
+        </div>
+
         {groups.map(g => (
           <GroupRow
             key={g.id}
             group={g}
             isAdmin={isAdmin}
-            collapsed={collapsedGroups.has(g.id)}
-            onToggle={() => onToggleGroup(g.id)}
+            focused={focusedGroupId === g.id}
+            onFocus={() => onFocusGroup(focusedGroupId === g.id ? null : g.id)}
             onDelete={() => onDeleteGroup(g.id)}
           />
         ))}
@@ -71,29 +82,29 @@ export function TopologyLeftSidebar({
 function GroupRow({
   group,
   isAdmin,
-  collapsed,
-  onToggle,
+  focused,
+  onFocus,
   onDelete,
 }: {
   group: NetworkGroupDto
   isAdmin: boolean
-  collapsed: boolean
-  onToggle: () => void
+  focused: boolean
+  onFocus: () => void
   onDelete: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
-      className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer')}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer',
+        focused && 'bg-muted/40 font-medium',
+      )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={onToggle}
+      onClick={onFocus}
     >
       <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: group.color }} />
       <span className="flex-1 truncate">{group.name}</span>
-      {collapsed
-        ? <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
-        : <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />}
       {isAdmin && hovered && (
         <button
           className="ml-1 text-destructive hover:opacity-70"

@@ -42,7 +42,32 @@
       "Bash(gh run:*)",
       "Bash(docker compose:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:dockhand.pro)"
-    ]
+      "WebFetch(domain:dockhand.pro)",
+      "Bash(systemctl status:*)",
+      "Bash(xargs ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(htpasswd -nbBC 10 admin)",
+      "Bash(python3 -c \"import bcrypt; print\\(bcrypt.hashpw\\(b''''admin'''', bcrypt.gensalt\\(rounds=10\\)\\).decode\\(\\)\\)\")",
+      "Bash(node -e \"const bcrypt=require\\(''''bcryptjs''''\\); bcrypt.hash\\(''''admin'''',10\\).then\\(h=>console.log\\(h\\)\\)\")",
+      "Bash(PGPASSWORD=nigger psql -h localhost -U hacksmc -d hacksmc -c \\\\\n  \"UPDATE users SET password_hash = '\\\\$2a\\\\$10\\\\$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy' WHERE username = 'admin' RETURNING username, role;\")",
+      "Read(//opt/hacksmc/**)",
+      "Read(//opt/**)",
+      "Read(//etc/systemd/system/**)",
+      "Bash(systemctl show:*)",
+      "Read(//etc/**)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(ls -la /home/phil/pfsmc/*.env /home/phil/pfsmc/.env*)",
+      "Bash(systemctl list-units:*)",
+      "Bash(node -e \"const pkg = require\\(''''./node_modules/@xyflow/react/package.json''''\\); console.log\\(pkg.version\\)\")",
+      "Bash(ls /home/phil/pfsmc/frontend/src/pages/*.tsx)",
+      "Bash(journalctl -u hacksmc-backend -n 50 --no-pager)",
+      "Bash(cat:*)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(sed -i '/const updateGroup = useUpdateTopologyGroup\\(\\)/d' /home/phil/pfsmc/frontend/src/pages/TopologyPage.tsx)",
+      "Bash(sed -i '/useUpdateTopologyGroup,/d' /home/phil/pfsmc/frontend/src/pages/TopologyPage.tsx)"
+    ],
+    "ask": []
   }
 }
