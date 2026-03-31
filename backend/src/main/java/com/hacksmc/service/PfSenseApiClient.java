@@ -368,11 +368,13 @@ public class PfSenseApiClient {
         log.info("fetchArpTable: {} entries, first entry: {}", entries.size(), entries.get(0));
 
         return entries.stream().map(entry -> {
-            // Handle both possible field name variants from different pfSense REST versions
-            String ip  = firstNonNull(entry, "ip", "ip_addr", "ipaddr");
-            String mac = firstNonNull(entry, "mac", "mac_addr", "macaddr");
-            String iface = firstNonNull(entry, "interface", "intf", "if");
+            // Handle field name variants across pfSense REST API versions
+            String ip       = firstNonNull(entry, "ip_address", "ip", "ip_addr", "ipaddr");
+            String mac      = firstNonNull(entry, "mac_address", "mac", "mac_addr", "macaddr");
+            String iface    = firstNonNull(entry, "interface", "intf", "if");
             String hostname = firstNonNull(entry, "hostname", "host", "dnsresolve");
+            // pfSense returns "?" when hostname is unknown — treat as empty
+            if ("?".equals(hostname)) hostname = null;
             return new ArpEntryDto(ip, mac, iface, hostname);
         }).toList();
     }
