@@ -239,7 +239,7 @@ public class PfSenseApiClient {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Integer> getHsmcRulePositions() {
-        List<Map<String, Object>> pfRules = fetchAllNatRules();
+        List<Map<String, Object>> pfRules = fetchAllNatPortForwardRules();
         Map<String, Integer> result = new HashMap<>();
         for (int i = 0; i < pfRules.size(); i++) {
             String descr = (String) pfRules.get(i).get("descr");
@@ -252,7 +252,7 @@ public class PfSenseApiClient {
     }
 
     private int findArrayIdByHsmcId(String hsmcId) {
-        Map<String, Integer> positions = getHsmcRulePositions();
+        Map<String, Integer> positions = getHsmcRulePositions(); // uses fetchAllNatPortForwardRules
         Integer idx = positions.get(hsmcId);
         if (idx == null) {
             throw new PfSenseException("NAT-Regel [hsmc:" + hsmcId + "] nicht in pfSense gefunden", null);
@@ -261,7 +261,7 @@ public class PfSenseApiClient {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> fetchAllNatRules() {
+    public List<Map<String, Object>> fetchAllNatPortForwardRules() {
         Map<String, Object> response;
         try {
             response = restClient.get()
@@ -269,17 +269,23 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
-            log.error("pfSense fetchAllNatRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.error("pfSense fetchAllNatPortForwardRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
-        if (response == null || !response.containsKey("data")) {
-            return List.of();
-        }
+        if (response == null || !response.containsKey("data")) return List.of();
         return (List<Map<String, Object>>) response.get("data");
     }
 
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> fetchAllFirewallPassRules() {
+        List<Map<String, Object>> all = fetchAllFirewallRules();
+        return all.stream()
+                .filter(r -> "pass".equalsIgnoreCase((String) r.get("type")))
+                .toList();
+    }
+
     /** Extracts the numeric ID from a description containing "[hsmc:X]", or null if absent. */
-    static String extractHsmcId(String descr) {
+    public static String extractHsmcId(String descr) {
         if (descr == null) return null;
         int start = descr.indexOf(TAG_PREFIX);
         if (start == -1) return null;

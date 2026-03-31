@@ -11,6 +11,7 @@ public record NetworkConnectionDto(
         Integer portEnd,
         String label,
         String status,
+        String direction,
         Long natRuleId,
         String firewallRuleId,
         Instant createdAt

@@ -43,6 +43,7 @@ export interface NetworkConnectionDto {
   portEnd: number | null
   label: string | null
   status: string
+  direction: string  // INBOUND | OUTBOUND | INTERNAL | UNKNOWN
   natRuleId: number | null
   firewallRuleId: string | null
   createdAt: string
@@ -268,6 +269,18 @@ export function useImportNatConnections() {
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'connections'] })
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
+    },
+  })
+}
+
+export function useImportFirewallConnections() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ imported: number }>('/api/admin/topology/scan/firewall-connections').then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['topology', 'connections'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'topology', 'connections'] })
     },
   })
 }

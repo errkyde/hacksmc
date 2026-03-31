@@ -27,6 +27,7 @@ import {
   useImportScanToTopology,
   useImportArpTable,
   useImportNatConnections,
+  useImportFirewallConnections,
   type NetworkConnectionDto,
 } from '@/hooks/useTopology'
 import { TopologyToolbar } from './topology/TopologyToolbar'
@@ -71,6 +72,7 @@ function TopologyInner() {
   const importScan = useImportScanToTopology()
   const importArp = useImportArpTable()
   const importNat = useImportNatConnections()
+  const importFw = useImportFirewallConnections()
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null)
@@ -158,7 +160,7 @@ function TopologyInner() {
         label,
         labelStyle: { fontSize: 10 },
         style: {
-          stroke: c.status === 'OK' ? '#22c55e' : c.status === 'ISSUE' ? '#ef4444' : '#64748b',
+          stroke: edgeColor(c),
           opacity: dimmedByNode || dimmedByGroup ? 0.15 : 1,
           strokeWidth: 1.5,
         },
@@ -282,6 +284,14 @@ function TopologyInner() {
     })
   }
 
+  function handleFirewallImport() {
+    importFw.mutate(undefined, {
+      onSuccess: (data: { imported: number }) =>
+        toast({ title: `FW Import: ${data.imported} neue Verbindung(en) aus Firewall-Regeln` }),
+      onError: () => toast({ title: 'Firewall-Import fehlgeschlagen', variant: 'destructive' }),
+    })
+  }
+
   function handleReset() {
     setSearch('')
     setFocusedNodeId(null)
@@ -301,11 +311,13 @@ function TopologyInner() {
         onScanClick={() => setShowScan(true)}
         onArpClick={handleArpImport}
         onNatImportClick={handleNatImport}
+        onFirewallImportClick={handleFirewallImport}
         onAddDevice={() => setShowAddDevice(true)}
         onFitView={() => fitViewFn.current?.()}
         onReset={handleReset}
         arpLoading={importArp.isPending}
         natImportLoading={importNat.isPending}
+        firewallImportLoading={importFw.isPending}
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <TopologyLeftSidebar
@@ -389,6 +401,24 @@ function TopologyInner() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Edge color by direction:
+ *   INBOUND  → blau (#3b82f6)  — eingehender Traffic / Download
+ *   OUTBOUND → orange (#f97316) — ausgehender Traffic / Upload
+ *   INTERNAL → lila (#a855f7)  — interner Traffic zwischen VLANs
+ *   ISSUE    → rot (#ef4444)
+ *   default  → grün (#22c55e)
+ */
+function edgeColor(c: NetworkConnectionDto): string {
+  if (c.status === 'ISSUE') return '#ef4444'
+  switch (c.direction) {
+    case 'INBOUND':  return '#3b82f6'  // blau — eingehend / Download
+    case 'OUTBOUND': return '#f97316'  // orange — ausgehend / Upload
+    case 'INTERNAL': return '#a855f7'  // lila — interne Verbindung
+    default:         return '#22c55e'  // grün — allgemein / OK
+  }
+}
 
 function isConnectedTo(focusedId: string, nodeId: string, connections: NetworkConnectionDto[]) {
   return connections.some(

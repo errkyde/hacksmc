@@ -45,6 +45,10 @@ public class NetworkConnection {
     @Column(name = "firewall_rule_id")
     private String firewallRuleId;
 
+    /** Traffic direction: INBOUND, OUTBOUND, INTERNAL, or UNKNOWN. */
+    @Column(nullable = false)
+    private String direction;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -52,5 +56,6 @@ public class NetworkConnection {
     void prePersist() {
         createdAt = Instant.now();
         if (status == null) status = "OK";
+        if (direction == null) direction = "UNKNOWN";
     }
 }

@@ -207,17 +207,125 @@ public class NetworkTopologyService {
     }
 
     /**
-     * Reads all active NAT rules from the DB and creates topology connections for them.
-     * Each rule becomes a connection: "Internet" device → host device.
-     * Skips rules where the target device (host IP) isn't in the topology yet.
+     * Reads ALL NAT port-forward rules directly from pfSense and creates INBOUND topology connections.
+     * Also links HackSMC-managed rules via the [hsmc:id] tag in the description.
      * Returns the number of newly created connections.
      */
+    @SuppressWarnings("unchecked")
     public int importNatRulesAsConnections() {
-        List<NatRule> activeRules = natRuleRepo.findActiveWithHost();
-        if (activeRules.isEmpty()) return 0;
+        List<Map<String, Object>> pfRules = pfSenseApiClient.fetchAllNatPortForwardRules();
+        if (pfRules.isEmpty()) return 0;
 
-        // Find or create the permanent "Internet/WAN" gateway node
-        NetworkDevice internet = deviceRepo.findFirstByName("Internet").orElseGet(() -> {
+        NetworkDevice internet = getOrCreateInternetDevice();
+
+        // Build lookup: hsmc-tagged DB rules by their pfsense ID string
+        Map<String, NatRule> hsmcRuleMap = new java.util.HashMap<>();
+        natRuleRepo.findActiveWithHost().forEach(r -> {
+            if (r.getPfSenseRuleId() != null) hsmcRuleMap.put(r.getPfSenseRuleId(), r);
+        });
+
+        int count = 0;
+        for (Map<String, Object> rule : pfRules) {
+            if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
+
+            // Extract target IP (internal host IP that receives forwarded traffic)
+            String targetIp = (String) rule.get("target");
+            if (targetIp == null || targetIp.isBlank()) continue;
+
+            Integer portStart = toPort(rule.get("local_port"));
+            Integer portEnd = portStart;
+            String protocol = (String) rule.get("protocol");
+            String descr = (String) rule.get("descr");
+
+            // Try to match to a known topology device
+            NetworkDevice target = deviceRepo.findByIpAddress(targetIp).orElse(null);
+            if (target == null) continue; // only create connections for known devices
+
+            if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
+                    internet.getId(), target.getId(), portStart)) continue;
+
+            NetworkConnection c = new NetworkConnection();
+            c.setSource(internet);
+            c.setTarget(target);
+            c.setProtocol(protocol);
+            c.setPortStart(portStart);
+            c.setPortEnd(portEnd);
+            c.setDirection("INBOUND");
+            c.setStatus("OK");
+
+            // Link to HackSMC DB rule if tagged
+            String hsmcId = com.hacksmc.service.PfSenseApiClient.extractHsmcId(descr);
+            if (hsmcId != null && hsmcRuleMap.containsKey(hsmcId)) {
+                c.setNatRule(hsmcRuleMap.get(hsmcId));
+            }
+            c.setLabel(descr != null && !descr.isBlank() ? descr : targetIp + " " + protocol + ":" + portStart);
+            connectionRepo.save(c);
+            count++;
+        }
+        log.info("NAT import: {} new topology connections created from {} pfSense rules", count, pfRules.size());
+        return count;
+    }
+
+    /**
+     * Reads all pfSense firewall pass rules and creates topology connections for rules
+     * where the destination IP matches a known topology device.
+     * Direction: WAN-interface rules → INBOUND, other interfaces → OUTBOUND.
+     */
+    @SuppressWarnings("unchecked")
+    public int importFirewallRulesAsConnections() {
+        List<Map<String, Object>> pfRules = pfSenseApiClient.fetchAllFirewallPassRules();
+        if (pfRules.isEmpty()) return 0;
+
+        NetworkDevice internet = getOrCreateInternetDevice();
+        int count = 0;
+
+        for (Map<String, Object> rule : pfRules) {
+            if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
+
+            String iface = (String) rule.get("interface");
+            String protocol = (String) rule.get("protocol");
+
+            // Determine direction from interface name
+            boolean isWan = iface != null && (iface.equalsIgnoreCase("wan")
+                    || iface.toLowerCase().startsWith("em0")
+                    || iface.toLowerCase().startsWith("igb0"));
+            String direction = isWan ? "INBOUND" : "OUTBOUND";
+
+            // Extract destination IP
+            String dstIp = extractIpFromRuleEndpoint(rule.get("dst"));
+            Integer dstPort = toPort(rule.get("dstport"));
+
+            if (dstIp == null) continue; // skip "any" rules — no specific target device
+
+            NetworkDevice target = deviceRepo.findByIpAddress(dstIp).orElse(null);
+            if (target == null) continue;
+
+            NetworkDevice source = isWan ? internet : null;
+            // For OUTBOUND rules: source is likely a LAN device — skip if unknown
+            if (source == null) continue;
+
+            if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
+                    source.getId(), target.getId(), dstPort)) continue;
+
+            String descr = (String) rule.get("descr");
+            NetworkConnection c = new NetworkConnection();
+            c.setSource(source);
+            c.setTarget(target);
+            c.setProtocol(protocol);
+            c.setPortStart(dstPort);
+            c.setPortEnd(dstPort);
+            c.setDirection(direction);
+            c.setStatus("OK");
+            c.setLabel(descr != null && !descr.isBlank() ? descr : dstIp + (dstPort != null ? ":" + dstPort : ""));
+            connectionRepo.save(c);
+            count++;
+        }
+        log.info("Firewall import: {} new topology connections created from pfSense pass rules", count);
+        return count;
+    }
+
+    private NetworkDevice getOrCreateInternetDevice() {
+        return deviceRepo.findFirstByName("Internet").orElseGet(() -> {
             NetworkDevice d = new NetworkDevice();
             d.setName("Internet");
             d.setDescription("Externer Internetzugang / WAN");
@@ -229,44 +337,28 @@ public class NetworkTopologyService {
             d.setPosY(50);
             return deviceRepo.save(d);
         });
+    }
 
-        int count = 0;
-        for (NatRule rule : activeRules) {
-            String hostIp = rule.getHost().getIpAddress();
-
-            // Find or create a topology device for this host
-            NetworkDevice target = deviceRepo.findByIpAddress(hostIp).orElseGet(() -> {
-                NetworkDevice d = new NetworkDevice();
-                d.setName(rule.getHost().getName());
-                d.setIpAddress(hostIp);
-                d.setDescription("Auto-importiert aus NAT-Regel");
-                d.setDeviceType("HOST");
-                d.setManual(false);
-                d.setShared(true);
-                d.setHost(rule.getHost());
-                return deviceRepo.save(d);
-            });
-
-            // Skip if connection already exists for this source/target/port combination
-            if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
-                    internet.getId(), target.getId(), rule.getPortStart())) continue;
-
-            NetworkConnection c = new NetworkConnection();
-            c.setSource(internet);
-            c.setTarget(target);
-            c.setProtocol(rule.getProtocol());
-            c.setPortStart(rule.getPortStart());
-            c.setPortEnd(rule.getPortEnd());
-            c.setLabel(rule.getHost().getName() + " " + rule.getProtocol() + ":" +
-                    (rule.getPortStart() == rule.getPortEnd() ? rule.getPortStart()
-                            : rule.getPortStart() + "-" + rule.getPortEnd()));
-            c.setNatRule(rule);
-            c.setStatus("OK");
-            connectionRepo.save(c);
-            count++;
+    @SuppressWarnings("unchecked")
+    private static String extractIpFromRuleEndpoint(Object endpoint) {
+        if (endpoint instanceof Map<?, ?> m) {
+            if (m.containsKey("address")) return (String) m.get("address");
+            if (Boolean.TRUE.equals(m.get("any"))) return null;
         }
-        log.info("NAT import: {} new topology connections created", count);
-        return count;
+        return null;
+    }
+
+    private static Integer toPort(Object val) {
+        if (val == null) return null;
+        String s = val.toString().trim();
+        if (s.isEmpty() || s.equals("any")) return null;
+        // pfSense uses "startport:endport" — take start port
+        int colon = s.indexOf(':');
+        try {
+            return Integer.parseInt(colon >= 0 ? s.substring(0, colon) : s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static String pickIfaceColor(String iface) {
@@ -308,15 +400,12 @@ public class NetworkTopologyService {
         c.setPortStart(req.portStart());
         c.setPortEnd(req.portEnd());
         c.setLabel(req.label());
-        connectionRepo.save(c);           // Phase 1: persist to get ID
-        tryCreateFirewallRule(c);
-        return toDto(connectionRepo.save(c));  // Phase 2: persist firewallRuleId / status
+        return toDto(connectionRepo.save(c));
     }
 
     public void deleteAdminConnection(Long id) {
         NetworkConnection c = connectionRepo.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Connection not found: " + id));
-        tryDeleteFirewallRule(c);
         connectionRepo.deleteById(id);
     }
 
@@ -355,30 +444,7 @@ public class NetworkTopologyService {
         c.setPortStart(req.portStart());
         c.setPortEnd(req.portEnd());
         c.setLabel(req.label());
-
-        // If source has a host and protocol+port are set → create a NAT rule
-        if (src.getHost() != null && req.protocol() != null && req.portStart() != null) {
-            int portEnd = req.portEnd() != null ? req.portEnd() : req.portStart();
-            try {
-                String desc = req.label() != null ? req.label() : "Topology connection";
-                CreateNatRuleRequest natReq = new CreateNatRuleRequest(
-                        src.getHost().getId(), req.protocol(), req.portStart(), portEnd, desc, null);
-                NatRule natRule = isAdmin(user)
-                        ? natRuleService.createRuleAsAdmin(username, natReq)
-                        : natRuleService.createRule(username, natReq);
-                c.setNatRule(natRule);
-                c.setStatus("OK");
-            } catch (PolicyViolationException e) {
-                throw e;
-            } catch (Exception e) {
-                log.warn("Could not create NAT rule for topology connection: {}", e.getMessage());
-                c.setStatus("ISSUE");
-            }
-        }
-
-        connectionRepo.save(c);           // Phase 1: persist NAT rule ref + initial status
-        tryCreateFirewallRule(c);
-        return toDto(connectionRepo.save(c));  // Phase 2: persist firewallRuleId / status
+        return toDto(connectionRepo.save(c));
     }
 
     public void deleteUserConnection(String username, Long connectionId) {
@@ -408,7 +474,6 @@ public class NetworkTopologyService {
             }
         }
 
-        tryDeleteFirewallRule(c);
         connectionRepo.deleteById(connectionId);
     }
 
@@ -455,48 +520,10 @@ public class NetworkTopologyService {
                 c.getPortEnd(),
                 c.getLabel(),
                 c.getStatus(),
+                c.getDirection(),
                 c.getNatRule() != null ? c.getNatRule().getId() : null,
                 c.getFirewallRuleId(),
                 c.getCreatedAt());
-    }
-
-    private void tryCreateFirewallRule(NetworkConnection c) {
-        NetworkDevice src = c.getSource();
-        NetworkDevice tgt = c.getTarget();
-
-        String iface = src.getPfSenseInterface();
-        if (iface == null || iface.isBlank()) {
-            log.warn("Skipping firewall rule for connection {} — source device {} has no pfSenseInterface",
-                    c.getId(), src.getId());
-            c.setStatus("ISSUE");
-            return;
-        }
-        String targetIp = tgt.getIpAddress();
-        if (targetIp == null || targetIp.isBlank()) {
-            log.warn("Skipping firewall rule for connection {} — target device {} has no IP address",
-                    c.getId(), tgt.getId());
-            c.setStatus("ISSUE");
-            return;
-        }
-        try {
-            String fwRuleId = pfSenseApiClient.createFirewallRule(
-                    iface, targetIp, c.getProtocol(), c.getPortStart(), c.getPortEnd(), c.getId());
-            c.setFirewallRuleId(fwRuleId);
-            if (!"ISSUE".equals(c.getStatus())) c.setStatus("OK");
-        } catch (Exception e) {
-            log.warn("Could not create firewall rule for topology connection {}: {}", c.getId(), e.getMessage());
-            c.setStatus("ISSUE");
-        }
-    }
-
-    private void tryDeleteFirewallRule(NetworkConnection c) {
-        if (c.getFirewallRuleId() == null || c.getFirewallRuleId().isBlank()) return;
-        try {
-            pfSenseApiClient.deleteFirewallRule(c.getFirewallRuleId());
-        } catch (Exception e) {
-            log.warn("Could not delete firewall rule {} for topology connection {}: {}",
-                    c.getFirewallRuleId(), c.getId(), e.getMessage());
-        }
     }
 
     private User getUser(String username) {

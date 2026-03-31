@@ -108,4 +108,12 @@ public class NetworkTopologyAdminController {
         int imported = topologyService.importNatRulesAsConnections();
         return Map.of("imported", imported);
     }
+
+    // ── Firewall pass rules → topology connections ────────────────────────────
+
+    @PostMapping("/scan/firewall-connections")
+    public Map<String, Integer> importFirewallConnections() {
+        int imported = topologyService.importFirewallRulesAsConnections();
+        return Map.of("imported", imported);
+    }
 }

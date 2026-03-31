@@ -1,4 +1,4 @@
-import { Scan, Download, Plus, Maximize2, RotateCcw, GitMerge } from 'lucide-react'
+import { Scan, Download, Plus, Maximize2, RotateCcw, GitMerge, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface Props {
@@ -6,11 +6,13 @@ interface Props {
   onScanClick: () => void
   onArpClick: () => void
   onNatImportClick: () => void
+  onFirewallImportClick: () => void
   onAddDevice: () => void
   onFitView: () => void
   onReset: () => void
   arpLoading?: boolean
   natImportLoading?: boolean
+  firewallImportLoading?: boolean
 }
 
 export function TopologyToolbar({
@@ -18,11 +20,13 @@ export function TopologyToolbar({
   onScanClick,
   onArpClick,
   onNatImportClick,
+  onFirewallImportClick,
   onAddDevice,
   onFitView,
   onReset,
   arpLoading,
   natImportLoading,
+  firewallImportLoading,
 }: Props) {
   return (
     <div className="flex items-center gap-2 border-b bg-background px-4 py-2">
@@ -39,9 +43,14 @@ export function TopologyToolbar({
               {arpLoading ? 'Lädt…' : 'ARP Import'}
             </Button>
             <Button size="sm" variant="outline" onClick={onNatImportClick} disabled={natImportLoading}
-              title="Importiert aktive NAT-Regeln als Verbindungen">
+              title="Alle NAT Port-Forward-Regeln aus pfSense importieren">
               <GitMerge className="mr-1 h-3.5 w-3.5" />
               {natImportLoading ? 'Lädt…' : 'NAT Import'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={onFirewallImportClick} disabled={firewallImportLoading}
+              title="Alle Firewall-Pass-Regeln aus pfSense importieren (nur anzeigen)">
+              <Shield className="mr-1 h-3.5 w-3.5" />
+              {firewallImportLoading ? 'Lädt…' : 'FW Import'}
             </Button>
             <Button size="sm" variant="outline" onClick={onAddDevice}>
               <Plus className="mr-1 h-3.5 w-3.5" />
