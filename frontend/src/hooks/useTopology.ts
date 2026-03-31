@@ -12,6 +12,7 @@ export interface NetworkGroupDto {
   layerOrder: number
   collapsed: boolean
   hidden: boolean
+  scanBlocked: boolean
   createdAt: string
 }
 
@@ -61,6 +62,7 @@ export interface UpdateGroupInput {
   layerOrder?: number
   collapsed?: boolean
   hidden?: boolean
+  scanBlocked?: boolean
 }
 
 export interface CreateDeviceInput {

@@ -63,6 +63,7 @@ public class NetworkTopologyService {
         if (req.layerOrder() != null) g.setLayerOrder(req.layerOrder());
         if (req.collapsed() != null) g.setCollapsed(req.collapsed());
         if (req.hidden() != null) g.setHidden(req.hidden());
+        if (req.scanBlocked() != null) g.setScanBlocked(req.scanBlocked());
         return toDto(groupRepo.save(g));
     }
 
@@ -173,9 +174,17 @@ public class NetworkTopologyService {
             ifaceGroupMap.put(iface, group);
         }
 
+        // Build set of scan-blocked group names for fast lookup
+        Set<String> scanBlockedIfaces = ifaceGroupMap.entrySet().stream()
+                .filter(e -> e.getValue().isScanBlocked())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+
         int count = 0;
         for (ArpEntryDto entry : arpEntries) {
             if (entry.ip() == null) continue;
+            // Skip devices whose interface is in a scan-blocked group
+            if (entry.iface() != null && scanBlockedIfaces.contains(entry.iface())) continue;
             final NetworkGroup group = entry.iface() != null ? ifaceGroupMap.get(entry.iface()) : null;
             deviceRepo.findByIpAddress(entry.ip()).ifPresentOrElse(
                     d -> {
@@ -497,7 +506,7 @@ public class NetworkTopologyService {
 
     private NetworkGroupDto toDto(NetworkGroup g) {
         return new NetworkGroupDto(g.getId(), g.getName(), g.getColor(),
-                g.getLayerOrder(), g.isCollapsed(), g.isHidden(), g.getCreatedAt());
+                g.getLayerOrder(), g.isCollapsed(), g.isHidden(), g.isScanBlocked(), g.getCreatedAt());
     }
 
     private NetworkDeviceDto toDto(NetworkDevice d) {

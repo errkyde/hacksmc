@@ -250,6 +250,15 @@ function TopologyInner() {
     updateGroup.mutate({ id, data: { hidden } })
   }
 
+  function handleToggleGroupScanBlocked(id: number, scanBlocked: boolean) {
+    updateGroup.mutate({ id, data: { scanBlocked } })
+  }
+
+  function handleSelectDevice(id: number) {
+    setSelectedDeviceId(id)
+    setFocusedNodeId(String(id))
+  }
+
   function handleDeleteGroup(id: number) {
     deleteGroup.mutate(id, {
       onSuccess: () => {
@@ -322,12 +331,16 @@ function TopologyInner() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <TopologyLeftSidebar
           groups={groups ?? []}
+          devices={devices ?? []}
           search={search}
           onSearchChange={setSearch}
           isAdmin={isAdmin}
           onAddGroup={() => setShowAddGroup(true)}
           onDeleteGroup={handleDeleteGroup}
           onToggleHidden={handleToggleGroupHidden}
+          onToggleScanBlocked={handleToggleGroupScanBlocked}
+          onDeleteDevice={handleDeleteDevice}
+          onSelectDevice={handleSelectDevice}
           focusedGroupId={focusedGroupId}
           onFocusGroup={setFocusedGroupId}
         />

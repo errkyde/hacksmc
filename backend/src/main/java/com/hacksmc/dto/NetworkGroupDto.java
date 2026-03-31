@@ -9,5 +9,6 @@ public record NetworkGroupDto(
         int layerOrder,
         boolean collapsed,
         boolean hidden,
+        boolean scanBlocked,
         Instant createdAt
 ) {}

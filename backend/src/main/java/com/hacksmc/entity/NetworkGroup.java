@@ -31,6 +31,9 @@ public class NetworkGroup {
     private boolean hidden;
 
     @Column(nullable = false)
+    private boolean scanBlocked;
+
+    @Column(nullable = false)
     private Instant createdAt;
 
     @PrePersist
