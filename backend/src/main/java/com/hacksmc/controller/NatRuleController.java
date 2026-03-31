@@ -6,7 +6,6 @@ import com.hacksmc.service.NatRuleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -33,7 +32,6 @@ public class NatRuleController {
 
     @PostMapping("/admin")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('ADMIN')")
     public NatRule createRuleAsAdmin(Principal principal,
                                      @Valid @RequestBody CreateNatRuleRequest request) {
         return natRuleService.createRuleAsAdmin(principal.getName(), request);

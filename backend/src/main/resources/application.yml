@@ -17,6 +17,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        temp:
+          use_jdbc_metadata_defaults: false
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -63,3 +65,5 @@ springdoc:
     path: /api/docs
   swagger-ui:
     path: /api/swagger-ui
+  pre-loading-enabled: false
+  default-produces-media-type: application/json
