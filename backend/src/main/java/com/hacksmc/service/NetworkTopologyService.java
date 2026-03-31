@@ -238,13 +238,13 @@ public class NetworkTopologyService {
             if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
 
             // Extract target IP (internal host IP that receives forwarded traffic)
-            String targetIp = (String) rule.get("target");
+            String targetIp = toStr(rule.get("target"));
             if (targetIp == null || targetIp.isBlank()) continue;
 
             Integer portStart = toPort(rule.get("local_port"));
             Integer portEnd = portStart;
-            String protocol = (String) rule.get("protocol");
-            String descr = (String) rule.get("descr");
+            String protocol = toStr(rule.get("protocol"));
+            String descr = toStr(rule.get("descr"));
 
             // Try to match to a known topology device
             NetworkDevice target = deviceRepo.findByIpAddress(targetIp).orElse(null);
@@ -282,52 +282,59 @@ public class NetworkTopologyService {
      */
     @SuppressWarnings("unchecked")
     public int importFirewallRulesAsConnections() {
-        List<Map<String, Object>> pfRules = pfSenseApiClient.fetchAllFirewallPassRules();
+        List<Map<String, Object>> pfRules;
+        try {
+            pfRules = pfSenseApiClient.fetchAllFirewallPassRules();
+        } catch (Exception e) {
+            log.warn("Firewall import: pfSense API not accessible — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            return 0;
+        }
         if (pfRules.isEmpty()) return 0;
 
         NetworkDevice internet = getOrCreateInternetDevice();
         int count = 0;
 
         for (Map<String, Object> rule : pfRules) {
-            if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
+            try {
+                if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
 
-            String iface = (String) rule.get("interface");
-            String protocol = (String) rule.get("protocol");
+                String iface = toStr(rule.get("interface"));
+                String protocol = toStr(rule.get("protocol"));
 
-            // Determine direction from interface name
-            boolean isWan = iface != null && (iface.equalsIgnoreCase("wan")
-                    || iface.toLowerCase().startsWith("em0")
-                    || iface.toLowerCase().startsWith("igb0"));
-            String direction = isWan ? "INBOUND" : "OUTBOUND";
+                boolean isWan = iface != null && (iface.equalsIgnoreCase("wan")
+                        || iface.toLowerCase().startsWith("em0")
+                        || iface.toLowerCase().startsWith("igb0"));
+                String direction = isWan ? "INBOUND" : "OUTBOUND";
 
-            // Extract destination IP
-            String dstIp = extractIpFromRuleEndpoint(rule.get("dst"));
-            Integer dstPort = toPort(rule.get("dstport"));
+                String dstIp = extractIpFromRuleEndpoint(rule.get("dst"));
+                Integer dstPort = toPort(rule.get("dstport"));
 
-            if (dstIp == null) continue; // skip "any" rules — no specific target device
+                if (dstIp == null) continue;
 
-            NetworkDevice target = deviceRepo.findByIpAddress(dstIp).orElse(null);
-            if (target == null) continue;
+                NetworkDevice target = deviceRepo.findByIpAddress(dstIp).orElse(null);
+                if (target == null) continue;
 
-            NetworkDevice source = isWan ? internet : null;
-            // For OUTBOUND rules: source is likely a LAN device — skip if unknown
-            if (source == null) continue;
+                NetworkDevice source = isWan ? internet : null;
+                if (source == null) continue;
 
-            if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
-                    source.getId(), target.getId(), dstPort)) continue;
+                if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
+                        source.getId(), target.getId(), dstPort)) continue;
 
-            String descr = (String) rule.get("descr");
-            NetworkConnection c = new NetworkConnection();
-            c.setSource(source);
-            c.setTarget(target);
-            c.setProtocol(protocol);
-            c.setPortStart(dstPort);
-            c.setPortEnd(dstPort);
-            c.setDirection(direction);
-            c.setStatus("OK");
-            c.setLabel(descr != null && !descr.isBlank() ? descr : dstIp + (dstPort != null ? ":" + dstPort : ""));
-            connectionRepo.save(c);
-            count++;
+                String descr = toStr(rule.get("descr"));
+                NetworkConnection c = new NetworkConnection();
+                c.setSource(source);
+                c.setTarget(target);
+                c.setProtocol(protocol);
+                c.setPortStart(dstPort);
+                c.setPortEnd(dstPort);
+                c.setDirection(direction);
+                c.setStatus("OK");
+                c.setLabel(descr != null && !descr.isBlank() ? descr : dstIp + (dstPort != null ? ":" + dstPort : ""));
+                connectionRepo.save(c);
+                count++;
+            } catch (Exception e) {
+                log.warn("Firewall import: skipping rule due to parse error — {}", e.getMessage());
+            }
         }
         log.info("Firewall import: {} new topology connections created from pfSense pass rules", count);
         return count;
@@ -355,6 +362,10 @@ public class NetworkTopologyService {
             if (Boolean.TRUE.equals(m.get("any"))) return null;
         }
         return null;
+    }
+
+    private static String toStr(Object val) {
+        return val instanceof String s ? s : (val != null ? val.toString() : null);
     }
 
     private static Integer toPort(Object val) {
