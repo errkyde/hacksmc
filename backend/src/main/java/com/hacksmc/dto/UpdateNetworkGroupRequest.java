@@ -4,5 +4,6 @@ public record UpdateNetworkGroupRequest(
         String name,
         String color,
         Integer layerOrder,
-        Boolean collapsed
+        Boolean collapsed,
+        Boolean hidden
 ) {}

@@ -23,6 +23,7 @@ import {
   useDeleteTopologyDevice,
   useDeleteTopologyGroup,
   useCreateTopologyGroup,
+  useUpdateTopologyGroup,
   useImportScanToTopology,
   useImportArpTable,
   useImportNatConnections,
@@ -66,6 +67,7 @@ function TopologyInner() {
   const createConn = useCreateConnection()
   const deleteConn = useDeleteConnection()
   const savePosition = useSaveDevicePosition()
+  const updateGroup = useUpdateTopologyGroup()
   const importScan = useImportScanToTopology()
   const importArp = useImportArpTable()
   const importNat = useImportNatConnections()
@@ -84,11 +86,17 @@ function TopologyInner() {
 
   const fitViewFn = useRef<(() => void) | null>(null)
 
-  // ── Group color lookup ────────────────────────────────────────────────────
+  // ── Group lookups ─────────────────────────────────────────────────────────
   const groupColorMap = useMemo(() => {
     const map = new Map<number, string>()
     ;(groups ?? []).forEach(g => map.set(g.id, g.color))
     return map
+  }, [groups])
+
+  const hiddenGroupIds = useMemo(() => {
+    const s = new Set<number>()
+    ;(groups ?? []).filter(g => g.hidden).forEach(g => s.add(g.id))
+    return s
   }, [groups])
 
   // ── Node/Edge transforms ──────────────────────────────────────────────────
@@ -104,8 +112,11 @@ function TopologyInner() {
         )
       : allDevices
 
+    // Exclude devices that belong to a hidden group
+    const visible = filtered.filter(d => d.groupId == null || !hiddenGroupIds.has(d.groupId))
+
     // If a group is focused in the sidebar, show only its devices (dim others)
-    return filtered.map(d => {
+    return visible.map(d => {
       const groupColor = d.groupId != null ? groupColorMap.get(d.groupId) : undefined
       const inFocusedGroup = focusedGroupId === null || d.groupId === focusedGroupId
       const dimmedByGroup = !inFocusedGroup
@@ -125,7 +136,7 @@ function TopologyInner() {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devices, groupColorMap, focusedGroupId, search, selectedDeviceId, focusedNodeId, connections])
+  }, [devices, groupColorMap, hiddenGroupIds, focusedGroupId, search, selectedDeviceId, focusedNodeId, connections])
 
   const rfEdges: Edge[] = useMemo(() =>
     (connections ?? []).map(c => {
@@ -233,6 +244,10 @@ function TopologyInner() {
     })
   }
 
+  function handleToggleGroupHidden(id: number, hidden: boolean) {
+    updateGroup.mutate({ id, data: { hidden } })
+  }
+
   function handleDeleteGroup(id: number) {
     deleteGroup.mutate(id, {
       onSuccess: () => {
@@ -300,6 +315,7 @@ function TopologyInner() {
           isAdmin={isAdmin}
           onAddGroup={() => setShowAddGroup(true)}
           onDeleteGroup={handleDeleteGroup}
+          onToggleHidden={handleToggleGroupHidden}
           focusedGroupId={focusedGroupId}
           onFocusGroup={setFocusedGroupId}
         />

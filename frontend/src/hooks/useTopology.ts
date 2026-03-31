@@ -11,6 +11,7 @@ export interface NetworkGroupDto {
   color: string
   layerOrder: number
   collapsed: boolean
+  hidden: boolean
   createdAt: string
 }
 
@@ -58,6 +59,7 @@ export interface UpdateGroupInput {
   color?: string
   layerOrder?: number
   collapsed?: boolean
+  hidden?: boolean
 }
 
 export interface CreateDeviceInput {

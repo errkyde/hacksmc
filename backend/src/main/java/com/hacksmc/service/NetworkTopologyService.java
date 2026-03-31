@@ -62,6 +62,7 @@ public class NetworkTopologyService {
         if (req.color() != null) g.setColor(req.color());
         if (req.layerOrder() != null) g.setLayerOrder(req.layerOrder());
         if (req.collapsed() != null) g.setCollapsed(req.collapsed());
+        if (req.hidden() != null) g.setHidden(req.hidden());
         return toDto(groupRepo.save(g));
     }
 
@@ -431,7 +432,7 @@ public class NetworkTopologyService {
 
     private NetworkGroupDto toDto(NetworkGroup g) {
         return new NetworkGroupDto(g.getId(), g.getName(), g.getColor(),
-                g.getLayerOrder(), g.isCollapsed(), g.getCreatedAt());
+                g.getLayerOrder(), g.isCollapsed(), g.isHidden(), g.getCreatedAt());
     }
 
     private NetworkDeviceDto toDto(NetworkDevice d) {

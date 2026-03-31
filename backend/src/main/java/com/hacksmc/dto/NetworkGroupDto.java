@@ -8,5 +8,6 @@ public record NetworkGroupDto(
         String color,
         int layerOrder,
         boolean collapsed,
+        boolean hidden,
         Instant createdAt
 ) {}

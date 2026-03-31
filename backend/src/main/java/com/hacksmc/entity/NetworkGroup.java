@@ -28,6 +28,9 @@ public class NetworkGroup {
     private boolean collapsed;
 
     @Column(nullable = false)
+    private boolean hidden;
+
+    @Column(nullable = false)
     private Instant createdAt;
 
     @PrePersist

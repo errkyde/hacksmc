@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Eye, EyeOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ interface Props {
   isAdmin: boolean
   onAddGroup: () => void
   onDeleteGroup: (id: number) => void
+  onToggleHidden: (id: number, hidden: boolean) => void
   focusedGroupId: number | null
   onFocusGroup: (id: number | null) => void
 }
@@ -23,6 +24,7 @@ export function TopologyLeftSidebar({
   isAdmin,
   onAddGroup,
   onDeleteGroup,
+  onToggleHidden,
   focusedGroupId,
   onFocusGroup,
 }: Props) {
@@ -68,6 +70,7 @@ export function TopologyLeftSidebar({
             focused={focusedGroupId === g.id}
             onFocus={() => onFocusGroup(focusedGroupId === g.id ? null : g.id)}
             onDelete={() => onDeleteGroup(g.id)}
+            onToggleHidden={() => onToggleHidden(g.id, !g.hidden)}
           />
         ))}
 
@@ -85,12 +88,14 @@ function GroupRow({
   focused,
   onFocus,
   onDelete,
+  onToggleHidden,
 }: {
   group: NetworkGroupDto
   isAdmin: boolean
   focused: boolean
   onFocus: () => void
   onDelete: () => void
+  onToggleHidden: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -98,20 +103,33 @@ function GroupRow({
       className={cn(
         'flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer',
         focused && 'bg-muted/40 font-medium',
+        group.hidden && 'opacity-40',
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onFocus}
     >
-      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: group.color }} />
-      <span className="flex-1 truncate">{group.name}</span>
+      <span
+        className="h-2.5 w-2.5 rounded-full shrink-0"
+        style={{ background: group.hidden ? '#64748b' : group.color }}
+      />
+      <span className={cn('flex-1 truncate', group.hidden && 'line-through')}>{group.name}</span>
       {isAdmin && hovered && (
-        <button
-          className="ml-1 text-destructive hover:opacity-70"
-          onClick={e => { e.stopPropagation(); onDelete() }}
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <>
+          <button
+            className="text-muted-foreground hover:text-foreground"
+            title={group.hidden ? 'Einblenden' : 'Ausblenden'}
+            onClick={e => { e.stopPropagation(); onToggleHidden() }}
+          >
+            {group.hidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+          </button>
+          <button
+            className="text-destructive hover:opacity-70"
+            onClick={e => { e.stopPropagation(); onDelete() }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </>
       )}
     </div>
   )
