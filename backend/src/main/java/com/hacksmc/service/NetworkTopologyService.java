@@ -152,21 +152,17 @@ public class NetworkTopologyService {
             return 0;
         }
 
-        // Fetch pfSense interface descriptions (e.g. "opt1" → "VLAN10") — best-effort
-        Map<String, String> ifaceNames = Map.of();
-        try { ifaceNames = pfSenseApiClient.fetchInterfaceNames(); } catch (Exception ignored) {}
-        final Map<String, String> ifaceNamesF = ifaceNames;
-
-        // Build/find one NetworkGroup per unique interface — used for VLAN grouping
+        // Build/find one NetworkGroup per unique interface — used for VLAN grouping.
+        // pfSense REST v2 returns the human-readable name directly in the "interface" field
+        // (e.g. "WAN", "LAN", "VLAN10") so no secondary interface-list API call is needed.
         Set<String> uniqueIfaces = arpEntries.stream()
                 .map(ArpEntryDto::iface).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, NetworkGroup> ifaceGroupMap = new HashMap<>();
         for (String iface : uniqueIfaces) {
-            String groupName = ifaceNamesF.getOrDefault(iface, iface.toUpperCase());
-            final String gName = groupName;
-            NetworkGroup group = groupRepo.findByName(groupName).orElseGet(() -> {
+            final String gName = iface;
+            NetworkGroup group = groupRepo.findByName(gName).orElseGet(() -> {
                 NetworkGroup g = new NetworkGroup();
                 g.setName(gName);
                 g.setColor(pickIfaceColor(iface));
