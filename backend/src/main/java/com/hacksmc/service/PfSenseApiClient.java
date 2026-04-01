@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Client for the pfSense REST API (pfrest.org v2).
@@ -279,8 +278,13 @@ public class PfSenseApiClient {
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> fetchAllFirewallPassRules() {
         List<Map<String, Object>> all = fetchAllFirewallRules();
+        log.info("fetchAllFirewallPassRules: {} total rules, first={}", all.size(),
+                all.isEmpty() ? "none" : all.get(0));
         return all.stream()
-                .filter(r -> "pass".equalsIgnoreCase((String) r.get("type")))
+                .filter(r -> {
+                    Object t = r.get("type");
+                    return "pass".equalsIgnoreCase(t != null ? t.toString() : null);
+                })
                 .toList();
     }
 

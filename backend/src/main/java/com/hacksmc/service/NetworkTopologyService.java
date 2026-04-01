@@ -289,7 +289,21 @@ public class NetworkTopologyService {
             log.warn("Firewall import: pfSense API not accessible — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             return 0;
         }
+        log.info("Firewall import: {} pass rules received from pfSense", pfRules.size());
         if (pfRules.isEmpty()) return 0;
+
+        // Build lookup maps from existing topology devices
+        List<NetworkDevice> allDevices = deviceRepo.findAllByOrderByCreatedAtAsc();
+        Map<String, NetworkDevice> ipToDevice = allDevices.stream()
+                .filter(d -> d.getIpAddress() != null)
+                .collect(Collectors.toMap(NetworkDevice::getIpAddress, d -> d, (a, b) -> a));
+        // interface name (lowercase) → first representative device on that interface
+        Map<String, NetworkDevice> ifaceToDevice = allDevices.stream()
+                .filter(d -> d.getPfSenseInterface() != null)
+                .collect(Collectors.toMap(
+                        d -> d.getPfSenseInterface().toLowerCase(),
+                        d -> d,
+                        (a, b) -> a));   // keep first found per interface
 
         NetworkDevice internet = getOrCreateInternetDevice();
         int count = 0;
@@ -300,27 +314,51 @@ public class NetworkTopologyService {
 
                 String iface = toStr(rule.get("interface"));
                 String protocol = toStr(rule.get("protocol"));
+                String descr = toStr(rule.get("descr"));
+                if (iface == null) continue;
 
-                boolean isWan = iface != null && (iface.equalsIgnoreCase("wan")
+                boolean isWan = iface.equalsIgnoreCase("wan")
                         || iface.toLowerCase().startsWith("em0")
-                        || iface.toLowerCase().startsWith("igb0"));
-                String direction = isWan ? "INBOUND" : "OUTBOUND";
+                        || iface.toLowerCase().startsWith("igb0")
+                        || iface.toLowerCase().startsWith("re0");
 
                 String dstIp = extractIpFromRuleEndpoint(rule.get("dst"));
                 Integer dstPort = toPort(rule.get("dstport"));
 
-                if (dstIp == null) continue;
+                NetworkDevice source;
+                NetworkDevice target;
+                String direction;
 
-                NetworkDevice target = deviceRepo.findByIpAddress(dstIp).orElse(null);
-                if (target == null) continue;
+                if (isWan) {
+                    // INBOUND: Internet → specific internal device
+                    if (dstIp == null) continue;  // dst=any on WAN is too broad — skip
+                    target = ipToDevice.get(dstIp);
+                    if (target == null) continue;
+                    source = internet;
+                    direction = "INBOUND";
+                } else {
+                    // Internal / OUTBOUND rule on a LAN or VLAN interface
+                    // Source representative = first device on this interface
+                    source = ifaceToDevice.get(iface.toLowerCase());
+                    if (source == null) continue;  // no known devices on this interface
 
-                NetworkDevice source = isWan ? internet : null;
-                if (source == null) continue;
+                    if (dstIp != null) {
+                        // Specific destination IP
+                        target = ipToDevice.get(dstIp);
+                        if (target == null) continue;
+                        direction = source.getId().equals(target.getId()) ? "INTERNAL" : "INTERNAL";
+                    } else {
+                        // dst=any → OUTBOUND to Internet
+                        target = internet;
+                        direction = "OUTBOUND";
+                    }
+                }
+
+                if (source.getId().equals(target.getId())) continue;
 
                 if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
                         source.getId(), target.getId(), dstPort)) continue;
 
-                String descr = toStr(rule.get("descr"));
                 NetworkConnection c = new NetworkConnection();
                 c.setSource(source);
                 c.setTarget(target);
@@ -329,11 +367,12 @@ public class NetworkTopologyService {
                 c.setPortEnd(dstPort);
                 c.setDirection(direction);
                 c.setStatus("OK");
-                c.setLabel(descr != null && !descr.isBlank() ? descr : dstIp + (dstPort != null ? ":" + dstPort : ""));
+                c.setLabel(descr != null && !descr.isBlank() ? descr
+                        : iface + (dstPort != null ? ":" + dstPort : "→any"));
                 connectionRepo.save(c);
                 count++;
             } catch (Exception e) {
-                log.warn("Firewall import: skipping rule due to parse error — {}", e.getMessage());
+                log.warn("Firewall import: skipping rule — {}", e.getMessage());
             }
         }
         log.info("Firewall import: {} new topology connections created from pfSense pass rules", count);
