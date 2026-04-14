@@ -2,7 +2,6 @@ package com.hacksmc.service;
 
 import com.hacksmc.dto.*;
 import com.hacksmc.entity.*;
-import com.hacksmc.exception.PolicyViolationException;
 import com.hacksmc.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,13 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,9 +20,12 @@ import java.util.stream.Collectors;
 @Transactional
 public class NetworkTopologyService {
 
+    static final long AUTO_VIEW_ID = 1L;
+
     private final NetworkGroupRepository groupRepo;
     private final NetworkDeviceRepository deviceRepo;
     private final NetworkConnectionRepository connectionRepo;
+    private final TopologyViewRepository viewRepo;
     private final UserRepository userRepo;
     private final HostRepository hostRepo;
     private final PolicyRepository policyRepo;
@@ -43,17 +39,48 @@ public class NetworkTopologyService {
     @Value("${hacksmc.pfsense.base-url}")
     private String pfSenseBaseUrl;
 
-    // ── Groups ────────────────────────────────────────────────────────────────
+    // ── Views ─────────────────────────────────────────────────────────────────
 
-    public List<NetworkGroupDto> listGroups() {
-        return groupRepo.findAllByOrderByLayerOrderAsc().stream().map(this::toDto).toList();
+    public List<TopologyViewDto> listViews() {
+        return viewRepo.findAllByOrderByCreatedAtAsc().stream().map(this::toDto).toList();
     }
 
-    public NetworkGroupDto createGroup(CreateNetworkGroupRequest req) {
+    public TopologyViewDto createView(CreateTopologyViewRequest req) {
+        TopologyView v = new TopologyView();
+        v.setName(req.name());
+        v.setDescription(req.description());
+        v.setAuto(false);
+        return toDto(viewRepo.save(v));
+    }
+
+    public TopologyViewDto updateView(Long id, UpdateTopologyViewRequest req) {
+        TopologyView v = viewRepo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("View not found: " + id));
+        if (req.name() != null && !req.name().isBlank()) v.setName(req.name());
+        if (req.description() != null) v.setDescription(req.description());
+        return toDto(viewRepo.save(v));
+    }
+
+    public void deleteView(Long id) {
+        TopologyView v = viewRepo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("View not found: " + id));
+        if (v.isAuto()) throw new IllegalStateException("The Auto view cannot be deleted");
+        viewRepo.deleteById(id);
+    }
+
+    // ── Groups ────────────────────────────────────────────────────────────────
+
+    public List<NetworkGroupDto> listGroups(Long viewId) {
+        return groupRepo.findByViewIdOrderByLayerOrderAsc(viewId).stream().map(this::toDto).toList();
+    }
+
+    public NetworkGroupDto createGroup(CreateNetworkGroupRequest req, Long viewId) {
+        TopologyView view = getView(viewId);
         NetworkGroup g = new NetworkGroup();
         g.setName(req.name());
         g.setColor(req.color() != null ? req.color() : "#64748b");
         g.setLayerOrder(req.layerOrder());
+        g.setView(view);
         NetworkGroupDto dto = toDto(groupRepo.save(g));
         broadcastService.broadcast(currentActor(), "GROUP_CREATED", g.getName());
         return dto;
@@ -83,11 +110,12 @@ public class NetworkTopologyService {
 
     // ── Devices (admin) ───────────────────────────────────────────────────────
 
-    public List<NetworkDeviceDto> listAllDevices() {
-        return deviceRepo.findAllByOrderByCreatedAtAsc().stream().map(this::toDto).toList();
+    public List<NetworkDeviceDto> listAllDevices(Long viewId) {
+        return deviceRepo.findByViewIdOrderByCreatedAtAsc(viewId).stream().map(this::toDto).toList();
     }
 
-    public NetworkDeviceDto createDevice(CreateNetworkDeviceRequest req) {
+    public NetworkDeviceDto createDevice(CreateNetworkDeviceRequest req, Long viewId) {
+        TopologyView view = getView(viewId);
         NetworkDevice d = new NetworkDevice();
         d.setName(req.name());
         d.setIpAddress(req.ipAddress());
@@ -99,6 +127,7 @@ public class NetworkTopologyService {
         d.setPosY(req.posY());
         d.setManual(true);
         d.setShared(req.isShared());
+        d.setView(view);
         if (req.groupId() != null) {
             d.setGroup(groupRepo.findById(req.groupId())
                     .orElseThrow(() -> new NoSuchElementException("Group not found: " + req.groupId())));
@@ -144,7 +173,8 @@ public class NetworkTopologyService {
         broadcastService.broadcast(currentActor(), "DEVICE_DELETED", name);
     }
 
-    public int importFromScan(List<ScannedHostResult> results, Long targetGroupId) {
+    public int importFromScan(List<ScannedHostResult> results, Long targetGroupId, Long viewId) {
+        TopologyView view = getView(viewId);
         NetworkGroup targetGroup = targetGroupId != null
                 ? groupRepo.findById(targetGroupId).orElse(null)
                 : null;
@@ -153,9 +183,8 @@ public class NetworkTopologyService {
             if (r.getIpAddress() == null) continue;
             String type = deviceTypeDetector.detect(r.getIpAddress(), r.getOpenPorts(), pfSenseBaseUrl);
             final NetworkGroup finalGroup = targetGroup;
-            deviceRepo.findByIpAddress(r.getIpAddress()).ifPresentOrElse(
+            deviceRepo.findByIpAddressAndViewId(r.getIpAddress(), viewId).ifPresentOrElse(
                     existing -> {
-                        // Update existing device hostname and group if not already set
                         if (r.getHostname() != null && !r.getHostname().isBlank()) existing.setHostname(r.getHostname());
                         if (finalGroup != null && existing.getGroup() == null) existing.setGroup(finalGroup);
                         deviceRepo.save(existing);
@@ -169,6 +198,7 @@ public class NetworkTopologyService {
                         d.setManual(false);
                         d.setShared(false);
                         d.setGroup(finalGroup);
+                        d.setView(view);
                         deviceRepo.save(d);
                         count[0]++;
                     }
@@ -178,34 +208,31 @@ public class NetworkTopologyService {
         return count[0];
     }
 
-    public int importArpTable() {
+    public int importArpTable(Long viewId) {
+        TopologyView view = getView(viewId);
         List<ArpEntryDto> arpEntries = pfSenseApiClient.fetchArpTable();
         if (arpEntries.isEmpty()) {
             log.info("ARP import: no entries returned from pfSense");
             return 0;
         }
 
-        // Build/find one NetworkGroup per unique interface — used for VLAN grouping.
-        // pfSense REST v2 returns the human-readable name directly in the "interface" field
-        // (e.g. "WAN", "LAN", "VLAN10") so no secondary interface-list API call is needed.
         Set<String> uniqueIfaces = arpEntries.stream()
                 .map(ArpEntryDto::iface).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, NetworkGroup> ifaceGroupMap = new HashMap<>();
         for (String iface : uniqueIfaces) {
-            final String gName = iface;
-            NetworkGroup group = groupRepo.findByName(gName).orElseGet(() -> {
+            NetworkGroup group = groupRepo.findByNameAndViewId(iface, viewId).orElseGet(() -> {
                 NetworkGroup g = new NetworkGroup();
-                g.setName(gName);
+                g.setName(iface);
                 g.setColor(pickIfaceColor(iface));
                 g.setLayerOrder(0);
+                g.setView(view);
                 return groupRepo.save(g);
             });
             ifaceGroupMap.put(iface, group);
         }
 
-        // Build set of scan-blocked group names for fast lookup
         Set<String> scanBlockedIfaces = ifaceGroupMap.entrySet().stream()
                 .filter(e -> e.getValue().isScanBlocked())
                 .map(Map.Entry::getKey)
@@ -214,15 +241,13 @@ public class NetworkTopologyService {
         int count = 0;
         for (ArpEntryDto entry : arpEntries) {
             if (entry.ip() == null) continue;
-            // Skip devices whose interface is in a scan-blocked group
             if (entry.iface() != null && scanBlockedIfaces.contains(entry.iface())) continue;
             final NetworkGroup group = entry.iface() != null ? ifaceGroupMap.get(entry.iface()) : null;
-            deviceRepo.findByIpAddress(entry.ip()).ifPresentOrElse(
+            deviceRepo.findByIpAddressAndViewId(entry.ip(), viewId).ifPresentOrElse(
                     d -> {
                         if (entry.mac() != null) d.setMacAddress(entry.mac());
                         if (entry.hostname() != null && !entry.hostname().isBlank()) d.setHostname(entry.hostname());
                         if (entry.iface() != null && !entry.iface().isBlank()) d.setPfSenseInterface(entry.iface());
-                        // Assign to group only if device has none yet
                         if (group != null && d.getGroup() == null) d.setGroup(group);
                         deviceRepo.save(d);
                     },
@@ -235,31 +260,26 @@ public class NetworkTopologyService {
                         d.setPfSenseInterface(entry.iface());
                         d.setDeviceType("UNKNOWN");
                         d.setManual(false);
-                        d.setShared(true); // ARP-imported devices are visible to all users
+                        d.setShared(true);
                         d.setGroup(group);
+                        d.setView(view);
                         deviceRepo.save(d);
                     }
             );
             count++;
         }
-        log.info("ARP import: {} devices upserted across {} VLAN groups", count, ifaceGroupMap.size());
+        log.info("ARP import: {} devices upserted in view {}", count, viewId);
         if (count > 0) broadcastService.broadcast(currentActor(), "ARP_IMPORTED", count + " Geräte");
         return count;
     }
 
-    /**
-     * Reads ALL NAT port-forward rules directly from pfSense and creates INBOUND topology connections.
-     * Also links HackSMC-managed rules via the [hsmc:id] tag in the description.
-     * Returns the number of newly created connections.
-     */
     @SuppressWarnings("unchecked")
-    public int importNatRulesAsConnections() {
+    public int importNatRulesAsConnections(Long viewId) {
         List<Map<String, Object>> pfRules = pfSenseApiClient.fetchAllNatPortForwardRules();
         if (pfRules.isEmpty()) return 0;
 
-        NetworkDevice internet = getOrCreateInternetDevice();
+        NetworkDevice internet = getOrCreateInternetDevice(viewId);
 
-        // Build lookup: hsmc-tagged DB rules by their pfsense ID string
         Map<String, NatRule> hsmcRuleMap = new java.util.HashMap<>();
         natRuleRepo.findActiveWithHost().forEach(r -> {
             if (r.getPfSenseRuleId() != null) hsmcRuleMap.put(r.getPfSenseRuleId(), r);
@@ -268,19 +288,14 @@ public class NetworkTopologyService {
         int count = 0;
         for (Map<String, Object> rule : pfRules) {
             if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
-
-            // Extract target IP (internal host IP that receives forwarded traffic)
             String targetIp = toStr(rule.get("target"));
             if (targetIp == null || targetIp.isBlank()) continue;
-
             Integer portStart = toPort(rule.get("local_port"));
-            Integer portEnd = portStart;
             String protocol = toStr(rule.get("protocol"));
             String descr = toStr(rule.get("descr"));
 
-            // Try to match to a known topology device
-            NetworkDevice target = deviceRepo.findByIpAddress(targetIp).orElse(null);
-            if (target == null) continue; // only create connections for known devices
+            NetworkDevice target = deviceRepo.findByIpAddressAndViewId(targetIp, viewId).orElse(null);
+            if (target == null) continue;
 
             if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
                     internet.getId(), target.getId(), portStart)) continue;
@@ -290,12 +305,11 @@ public class NetworkTopologyService {
             c.setTarget(target);
             c.setProtocol(protocol);
             c.setPortStart(portStart);
-            c.setPortEnd(portEnd);
+            c.setPortEnd(portStart);
             c.setDirection("INBOUND");
             c.setStatus("OK");
 
-            // Link to HackSMC DB rule if tagged
-            String hsmcId = com.hacksmc.service.PfSenseApiClient.extractHsmcId(descr);
+            String hsmcId = PfSenseApiClient.extractHsmcId(descr);
             if (hsmcId != null && hsmcRuleMap.containsKey(hsmcId)) {
                 c.setNatRule(hsmcRuleMap.get(hsmcId));
             }
@@ -303,54 +317,43 @@ public class NetworkTopologyService {
             connectionRepo.save(c);
             count++;
         }
-        log.info("NAT import: {} new topology connections created from {} pfSense rules", count, pfRules.size());
+        log.info("NAT import: {} new connections in view {}", count, viewId);
         if (count > 0) broadcastService.broadcast(currentActor(), "NAT_IMPORTED", count + " Verbindungen");
         return count;
     }
 
-    /**
-     * Reads all pfSense firewall pass rules and creates topology connections for rules
-     * where the destination IP matches a known topology device.
-     * Direction: WAN-interface rules → INBOUND, other interfaces → OUTBOUND.
-     */
     @SuppressWarnings("unchecked")
-    public int importFirewallRulesAsConnections() {
+    public int importFirewallRulesAsConnections(Long viewId) {
         List<Map<String, Object>> pfRules;
         try {
             pfRules = pfSenseApiClient.fetchAllFirewallPassRules();
         } catch (Exception e) {
-            log.warn("Firewall import: pfSense API not accessible — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("Firewall import: pfSense not accessible — {}", e.getMessage());
             return 0;
         }
-        log.info("Firewall import: {} pass rules received from pfSense", pfRules.size());
         if (pfRules.isEmpty()) return 0;
 
-        // Build lookup maps from existing topology devices
-        List<NetworkDevice> allDevices = deviceRepo.findAllByOrderByCreatedAtAsc();
+        List<NetworkDevice> allDevices = deviceRepo.findByViewIdOrderByCreatedAtAsc(viewId);
         Map<String, NetworkDevice> ipToDevice = allDevices.stream()
                 .filter(d -> d.getIpAddress() != null)
                 .collect(Collectors.toMap(NetworkDevice::getIpAddress, d -> d, (a, b) -> a));
-        // interface name (lowercase) → first representative device on that interface
         Map<String, NetworkDevice> ifaceToDevice = allDevices.stream()
                 .filter(d -> d.getPfSenseInterface() != null)
                 .collect(Collectors.toMap(
                         d -> d.getPfSenseInterface().toLowerCase(),
-                        d -> d,
-                        (a, b) -> a));   // keep first found per interface
+                        d -> d, (a, b) -> a));
 
-        NetworkDevice internet = getOrCreateInternetDevice();
+        NetworkDevice internet = getOrCreateInternetDevice(viewId);
         int count = 0;
 
         for (Map<String, Object> rule : pfRules) {
             try {
                 if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
-
-                // pfSense v2 API: "interface" is a List for floating rules, String otherwise
                 Object ifaceRaw = rule.get("interface");
                 String iface;
                 if (ifaceRaw instanceof List<?> list) {
                     if (list.isEmpty()) continue;
-                    iface = toStr(list.get(0));  // use first interface as representative
+                    iface = toStr(list.get(0));
                 } else {
                     iface = toStr(ifaceRaw);
                 }
@@ -358,13 +361,11 @@ public class NetworkTopologyService {
 
                 String protocol = toStr(rule.get("protocol"));
                 String descr = toStr(rule.get("descr"));
-
                 boolean isWan = iface.equalsIgnoreCase("wan")
                         || iface.toLowerCase().startsWith("em0")
                         || iface.toLowerCase().startsWith("igb0")
                         || iface.toLowerCase().startsWith("re0");
 
-                // pfSense v2 API uses "destination" and "destination_port" (not "dst"/"dstport")
                 String dstIp = extractIpFromRuleEndpoint(rule.get("destination"));
                 Integer dstPort = toPort(rule.get("destination_port"));
 
@@ -373,32 +374,25 @@ public class NetworkTopologyService {
                 String direction;
 
                 if (isWan) {
-                    // INBOUND: Internet → specific internal device
-                    if (dstIp == null) continue;  // dst=any on WAN is too broad — skip
+                    if (dstIp == null) continue;
                     target = ipToDevice.get(dstIp);
                     if (target == null) continue;
                     source = internet;
                     direction = "INBOUND";
                 } else {
-                    // Internal / OUTBOUND rule on a LAN or VLAN interface
-                    // Source representative = first device on this interface
                     source = ifaceToDevice.get(iface.toLowerCase());
-                    if (source == null) continue;  // no known devices on this interface
-
+                    if (source == null) continue;
                     if (dstIp != null) {
-                        // Specific destination IP
                         target = ipToDevice.get(dstIp);
                         if (target == null) continue;
-                        direction = source.getId().equals(target.getId()) ? "INTERNAL" : "INTERNAL";
+                        direction = "INTERNAL";
                     } else {
-                        // dst=any → OUTBOUND to Internet
                         target = internet;
                         direction = "OUTBOUND";
                     }
                 }
 
                 if (source.getId().equals(target.getId())) continue;
-
                 if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
                         source.getId(), target.getId(), dstPort)) continue;
 
@@ -418,13 +412,14 @@ public class NetworkTopologyService {
                 log.warn("Firewall import: skipping rule — {}", e.getMessage());
             }
         }
-        log.info("Firewall import: {} new topology connections created from pfSense pass rules", count);
+        log.info("Firewall import: {} connections in view {}", count, viewId);
         if (count > 0) broadcastService.broadcast(currentActor(), "FW_IMPORTED", count + " Verbindungen");
         return count;
     }
 
-    private NetworkDevice getOrCreateInternetDevice() {
-        return deviceRepo.findFirstByName("Internet").orElseGet(() -> {
+    private NetworkDevice getOrCreateInternetDevice(Long viewId) {
+        TopologyView view = getView(viewId);
+        return deviceRepo.findFirstByNameAndViewId("Internet", viewId).orElseGet(() -> {
             NetworkDevice d = new NetworkDevice();
             d.setName("Internet");
             d.setDescription("Externer Internetzugang / WAN");
@@ -434,68 +429,26 @@ public class NetworkTopologyService {
             d.setPfSenseInterface("wan");
             d.setPosX(50);
             d.setPosY(50);
+            d.setView(view);
             return deviceRepo.save(d);
         });
     }
 
-    @SuppressWarnings("unchecked")
-    private static String extractIpFromRuleEndpoint(Object endpoint) {
-        if (endpoint == null) return null;
-        // pfSense v2: destination/source can be the string "any"
-        if (endpoint instanceof String s) {
-            return "any".equalsIgnoreCase(s.trim()) ? null : s.trim();
-        }
-        if (endpoint instanceof Map<?, ?> m) {
-            // {address: "1.2.3.4", subnet: 32} — specific host/network
-            Object addr = m.get("address");
-            if (addr != null) return toStr(addr);
-            // {network: "opt1"} or {any: true} — no specific IP
-        }
-        return null;
-    }
-
-    private static String toStr(Object val) {
-        return val instanceof String s ? s : (val != null ? val.toString() : null);
-    }
-
-    private static Integer toPort(Object val) {
-        if (val == null) return null;
-        String s = val.toString().trim();
-        if (s.isEmpty() || s.equals("any")) return null;
-        // pfSense uses "startport:endport" — take start port
-        int colon = s.indexOf(':');
-        try {
-            return Integer.parseInt(colon >= 0 ? s.substring(0, colon) : s);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static String pickIfaceColor(String iface) {
-        if (iface == null) return "#64748b";
-        String l = iface.toLowerCase();
-        if (l.equals("wan") || l.startsWith("em0") || l.startsWith("igb0") || l.startsWith("re0")) return "#ef4444";
-        if (l.equals("lan") || l.startsWith("em1") || l.startsWith("igb1")) return "#22c55e";
-        // Deterministic color for VLAN/opt interfaces
-        String[] palette = {"#3b82f6", "#a855f7", "#f59e0b", "#06b6d4", "#ec4899", "#84cc16", "#f97316"};
-        return palette[Math.abs(iface.hashCode()) % palette.length];
-    }
-
     // ── Devices (user-visible) ────────────────────────────────────────────────
 
-    public List<NetworkDeviceDto> listVisibleDevices(String username) {
+    public List<NetworkDeviceDto> listVisibleDevices(String username, Long viewId) {
         User user = getUser(username);
-        if (isAdmin(user)) return listAllDevices();
+        if (isAdmin(user)) return listAllDevices(viewId);
         List<Long> hostIds = policyRepo.findByUserIdWithHost(user.getId()).stream()
                 .map(p -> p.getHost().getId()).toList();
-        if (hostIds.isEmpty()) return deviceRepo.findAllShared().stream().map(this::toDto).toList();
-        return deviceRepo.findVisibleForHosts(hostIds).stream().map(this::toDto).toList();
+        if (hostIds.isEmpty()) return deviceRepo.findAllShared(viewId).stream().map(this::toDto).toList();
+        return deviceRepo.findVisibleForHosts(viewId, hostIds).stream().map(this::toDto).toList();
     }
 
     // ── Connections (admin) ───────────────────────────────────────────────────
 
-    public List<NetworkConnectionDto> listAllConnections() {
-        return connectionRepo.findAllByOrderByCreatedAtAsc().stream().map(this::toDto).toList();
+    public List<NetworkConnectionDto> listAllConnections(Long viewId) {
+        return connectionRepo.findByViewId(viewId).stream().map(this::toDto).toList();
     }
 
     public NetworkConnectionDto createAdminConnection(CreateNetworkConnectionRequest req) {
@@ -525,10 +478,10 @@ public class NetworkTopologyService {
 
     // ── Connections (user) ────────────────────────────────────────────────────
 
-    public List<NetworkConnectionDto> listVisibleConnections(String username) {
+    public List<NetworkConnectionDto> listVisibleConnections(String username, Long viewId) {
         User user = getUser(username);
-        if (isAdmin(user)) return listAllConnections();
-        List<NetworkDeviceDto> visibleDevices = listVisibleDevices(username);
+        if (isAdmin(user)) return listAllConnections(viewId);
+        List<NetworkDeviceDto> visibleDevices = listVisibleDevices(username, viewId);
         List<Long> deviceIds = visibleDevices.stream().map(NetworkDeviceDto::id).toList();
         if (deviceIds.isEmpty()) return List.of();
         return connectionRepo.findVisibleConnections(deviceIds).stream().map(this::toDto).toList();
@@ -536,13 +489,11 @@ public class NetworkTopologyService {
 
     public NetworkConnectionDto createUserConnection(String username, CreateNetworkConnectionRequest req) {
         User user = getUser(username);
-
         NetworkDevice src = deviceRepo.findById(req.sourceDeviceId())
                 .orElseThrow(() -> new NoSuchElementException("Source device not found: " + req.sourceDeviceId()));
         NetworkDevice tgt = deviceRepo.findById(req.targetDeviceId())
                 .orElseThrow(() -> new NoSuchElementException("Target device not found: " + req.targetDeviceId()));
 
-        // Verify source device belongs to this user (via host assignment)
         if (!isAdmin(user)) {
             Set<Long> userHostIds = policyRepo.findByUserIdWithHost(user.getId()).stream()
                     .map(p -> p.getHost().getId()).collect(Collectors.toSet());
@@ -576,16 +527,12 @@ public class NetworkTopologyService {
             }
         }
 
-        // Delete the linked NAT rule if present
         if (c.getNatRule() != null) {
             try {
-                if (isAdmin(user)) {
-                    adminService.deleteRuleAsAdmin(c.getNatRule().getId());
-                } else {
-                    natRuleService.deleteRule(username, c.getNatRule().getId());
-                }
+                if (isAdmin(user)) adminService.deleteRuleAsAdmin(c.getNatRule().getId());
+                else natRuleService.deleteRule(username, c.getNatRule().getId());
             } catch (Exception e) {
-                log.warn("Could not delete NAT rule {} for topology connection {}: {}",
+                log.warn("Could not delete NAT rule {} for connection {}: {}",
                         c.getNatRule().getId(), connectionId, e.getMessage());
             }
         }
@@ -613,6 +560,15 @@ public class NetworkTopologyService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private TopologyView getView(Long viewId) {
+        return viewRepo.findById(viewId)
+                .orElseThrow(() -> new NoSuchElementException("View not found: " + viewId));
+    }
+
+    private TopologyViewDto toDto(TopologyView v) {
+        return new TopologyViewDto(v.getId(), v.getName(), v.getDescription(), v.isAuto(), v.getCreatedAt());
+    }
+
     private NetworkGroupDto toDto(NetworkGroup g) {
         return new NetworkGroupDto(g.getId(), g.getName(), g.getColor(),
                 g.getLayerOrder(), g.isCollapsed(), g.isHidden(), g.isScanBlocked(), g.getCreatedAt());
@@ -630,18 +586,11 @@ public class NetworkTopologyService {
 
     private NetworkConnectionDto toDto(NetworkConnection c) {
         return new NetworkConnectionDto(
-                c.getId(),
-                c.getSource().getId(),
-                c.getTarget().getId(),
-                c.getProtocol(),
-                c.getPortStart(),
-                c.getPortEnd(),
-                c.getLabel(),
-                c.getStatus(),
-                c.getDirection(),
+                c.getId(), c.getSource().getId(), c.getTarget().getId(),
+                c.getProtocol(), c.getPortStart(), c.getPortEnd(), c.getLabel(),
+                c.getStatus(), c.getDirection(),
                 c.getNatRule() != null ? c.getNatRule().getId() : null,
-                c.getFirewallRuleId(),
-                c.getCreatedAt());
+                c.getFirewallRuleId(), c.getCreatedAt());
     }
 
     private User getUser(String username) {
@@ -649,16 +598,46 @@ public class NetworkTopologyService {
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + username));
     }
 
-    private boolean isAdmin(User user) {
-        return "ADMIN".equals(user.getRole());
-    }
+    private boolean isAdmin(User user) { return "ADMIN".equals(user.getRole()); }
 
-    /** Resolves the currently authenticated username from the security context. */
     private String currentActor() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
             return auth.getName();
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String extractIpFromRuleEndpoint(Object endpoint) {
+        if (endpoint == null) return null;
+        if (endpoint instanceof String s) return "any".equalsIgnoreCase(s.trim()) ? null : s.trim();
+        if (endpoint instanceof Map<?, ?> m) {
+            Object addr = m.get("address");
+            if (addr != null) return toStr(addr);
+        }
+        return null;
+    }
+
+    private static String toStr(Object val) {
+        return val instanceof String s ? s : (val != null ? val.toString() : null);
+    }
+
+    private static Integer toPort(Object val) {
+        if (val == null) return null;
+        String s = val.toString().trim();
+        if (s.isEmpty() || s.equals("any")) return null;
+        int colon = s.indexOf(':');
+        try { return Integer.parseInt(colon >= 0 ? s.substring(0, colon) : s); }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private static String pickIfaceColor(String iface) {
+        if (iface == null) return "#64748b";
+        String l = iface.toLowerCase();
+        if (l.equals("wan") || l.startsWith("em0") || l.startsWith("igb0") || l.startsWith("re0")) return "#ef4444";
+        if (l.equals("lan") || l.startsWith("em1") || l.startsWith("igb1")) return "#22c55e";
+        String[] palette = {"#3b82f6", "#a855f7", "#f59e0b", "#06b6d4", "#ec4899", "#84cc16", "#f97316"};
+        return palette[Math.abs(iface.hashCode()) % palette.length];
     }
 }

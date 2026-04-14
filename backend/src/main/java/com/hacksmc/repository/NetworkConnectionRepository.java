@@ -8,8 +8,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface NetworkConnectionRepository extends JpaRepository<NetworkConnection, Long> {
-    List<NetworkConnection> findAllByOrderByCreatedAtAsc();
 
+    /** All connections where both devices belong to the given view. */
+    @Query("SELECT c FROM NetworkConnection c WHERE c.source.view.id = :viewId ORDER BY c.createdAt ASC")
+    List<NetworkConnection> findByViewId(@Param("viewId") Long viewId);
+
+    /** Connections where both endpoints are in the given device ID set (used for user-visible filtering). */
     @Query("SELECT c FROM NetworkConnection c WHERE c.source.id IN :deviceIds AND c.target.id IN :deviceIds ORDER BY c.createdAt ASC")
     List<NetworkConnection> findVisibleConnections(@Param("deviceIds") List<Long> deviceIds);
 
@@ -20,4 +24,7 @@ public interface NetworkConnectionRepository extends JpaRepository<NetworkConnec
 
     /** Checks if any connection exists between two devices, regardless of port. */
     boolean existsBySourceIdAndTargetId(Long sourceId, Long targetId);
+
+    // Legacy full-table scan (used only where already scoped to a single view via device IDs)
+    List<NetworkConnection> findAllByOrderByCreatedAtAsc();
 }

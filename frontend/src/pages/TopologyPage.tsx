@@ -35,10 +35,15 @@ import {
   useAutoScan,
   usePatchTopologyDevice,
   useTopologyEvents,
+  useTopologyViews,
+  useCreateTopologyView,
+  useDeleteTopologyView,
+  useUpdateTopologyView,
   type NetworkConnectionDto,
   type TopologyEvent,
 } from '@/hooks/useTopology'
 import { TopologyToolbar } from './topology/TopologyToolbar'
+import { TopologyViewTabs } from './topology/TopologyViewTabs'
 import { TopologyLeftSidebar } from './topology/TopologyLeftSidebar'
 import { TopologyCanvas } from './topology/TopologyCanvas'
 import { TopologyRightPanel } from './topology/TopologyRightPanel'
@@ -172,10 +177,17 @@ function TopologyInner() {
     if (msgFn) toast({ title: msgFn(event.actor, event.entity), duration: 4000 })
   })
 
+  // ── View selection ────────────────────────────────────────────────────────
+  const [selectedViewId, setSelectedViewId] = useState(1)
+  const { data: views } = useTopologyViews()
+  const createView = useCreateTopologyView()
+  const deleteView = useDeleteTopologyView()
+  const updateView = useUpdateTopologyView()
+
   // ── Data ──────────────────────────────────────────────────────────────────
-  const { data: groups } = useTopologyGroups()
-  const { data: devices } = useTopologyDevices()
-  const { data: connections } = useTopologyConnections()
+  const { data: groups } = useTopologyGroups(selectedViewId)
+  const { data: devices } = useTopologyDevices(selectedViewId)
+  const { data: connections } = useTopologyConnections(selectedViewId)
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createDevice = useCreateTopologyDevice()
@@ -528,7 +540,7 @@ function TopologyInner() {
 
   function handleImportScan(scanned: ScannedHost[], targetGroupId?: number | null) {
     importScan.mutate(
-      { devices: scanned, targetGroupId: targetGroupId ?? undefined },
+      { devices: scanned, targetGroupId: targetGroupId ?? undefined, viewId: selectedViewId },
       {
         onSuccess: (data: { imported: number }) =>
           toast({ title: `${data.imported} Gerät${data.imported !== 1 ? 'e' : ''} importiert` }),
@@ -538,7 +550,7 @@ function TopologyInner() {
   }
 
   function handleArpImport() {
-    importArp.mutate(undefined, {
+    importArp.mutate(selectedViewId, {
       onSuccess: (data: { upserted: number }) =>
         toast({ title: `ARP: ${data.upserted} Gerät${data.upserted !== 1 ? 'e' : ''} importiert/aktualisiert` }),
       onError: (err: unknown) => {
@@ -549,7 +561,7 @@ function TopologyInner() {
   }
 
   function handleNatImport() {
-    importNat.mutate(undefined, {
+    importNat.mutate(selectedViewId, {
       onSuccess: (data: { imported: number }) =>
         toast({ title: `NAT: ${data.imported} neue Verbindung${data.imported !== 1 ? 'en' : ''} erstellt` }),
       onError: () => toast({ title: 'NAT-Import fehlgeschlagen', variant: 'destructive' }),
@@ -557,7 +569,7 @@ function TopologyInner() {
   }
 
   function handleFirewallImport() {
-    importFw.mutate(undefined, {
+    importFw.mutate(selectedViewId, {
       onSuccess: (data: { imported: number }) =>
         toast({ title: `Firewall: ${data.imported} neue Verbindung${data.imported !== 1 ? 'en' : ''} importiert` }),
       onError: () => toast({ title: 'Firewall-Import fehlgeschlagen', variant: 'destructive' }),
@@ -565,7 +577,7 @@ function TopologyInner() {
   }
 
   function handleAutoScan() {
-    autoScan.mutate(undefined, {
+    autoScan.mutate(selectedViewId, {
       onSuccess: (data) => {
         // Auto-apply hierarchical layout immediately after scan completes
         // (nodes/edges will have been refreshed by query invalidation)
@@ -696,8 +708,42 @@ function TopologyInner() {
     ? ((devices ?? []).find(d => d.id === selectedDeviceId) ?? null)
     : null
 
+  function handleCreateView(name: string) {
+    createView.mutate({ name }, {
+      onSuccess: (view) => setSelectedViewId(view.id),
+      onError: () => toast({ title: 'Fehler beim Erstellen der Ansicht', variant: 'destructive' }),
+    })
+  }
+
+  function handleDeleteView(id: number) {
+    deleteView.mutate(id, {
+      onSuccess: () => {
+        if (selectedViewId === id) setSelectedViewId(1)
+        toast({ title: 'Ansicht gelöscht' })
+      },
+      onError: () => toast({ title: 'Fehler beim Löschen der Ansicht', variant: 'destructive' }),
+    })
+  }
+
+  function handleRenameView(id: number, name: string) {
+    const view = (views ?? []).find(v => v.id === id)
+    if (!view) return
+    updateView.mutate({ id, name, description: view.description ?? undefined }, {
+      onError: () => toast({ title: 'Fehler beim Umbenennen', variant: 'destructive' }),
+    })
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <TopologyViewTabs
+        views={views ?? []}
+        selectedViewId={selectedViewId}
+        onSelect={setSelectedViewId}
+        onCreateView={handleCreateView}
+        onDeleteView={handleDeleteView}
+        onRenameView={handleRenameView}
+        isAdmin={isAdmin}
+      />
       <TopologyToolbar
         isAdmin={isAdmin}
         showLegend={showLegend}
@@ -834,7 +880,7 @@ function TopologyInner() {
         open={showAddDevice}
         onOpenChange={setShowAddDevice}
         groups={groups ?? []}
-        onSubmit={data => createDevice.mutate(data, {
+        onSubmit={data => createDevice.mutate({ data, viewId: selectedViewId }, {
           onSuccess: () => toast({ title: 'Gerät erstellt' }),
           onError: () => toast({ title: 'Fehler beim Erstellen', variant: 'destructive' }),
         })}
@@ -854,7 +900,7 @@ function TopologyInner() {
       <AddGroupDialog
         open={showAddGroup}
         onOpenChange={setShowAddGroup}
-        onSubmit={data => createGroup.mutate(data, {
+        onSubmit={data => createGroup.mutate({ data, viewId: selectedViewId }, {
           onSuccess: () => toast({ title: 'Gruppe erstellt' }),
           onError: () => toast({ title: 'Fehler beim Erstellen', variant: 'destructive' }),
         })}

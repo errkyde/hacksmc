@@ -100,28 +100,72 @@ export interface CreateConnectionInput {
   label?: string
 }
 
+// ── View types + hooks ────────────────────────────────────────────────────────
+
+export interface TopologyViewDto {
+  id: number
+  name: string
+  description: string | null
+  isAuto: boolean
+  createdAt: string
+}
+
+export function useTopologyViews() {
+  return useQuery<TopologyViewDto[]>({
+    queryKey: ['topology', 'views'],
+    queryFn: () => api.get<TopologyViewDto[]>('/api/topology/views').then(r => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useCreateTopologyView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string }) =>
+      api.post<TopologyViewDto>('/api/admin/topology/views', data).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['topology', 'views'] }),
+  })
+}
+
+export function useUpdateTopologyView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name, description }: { id: number; name: string; description?: string }) =>
+      api.put<TopologyViewDto>(`/api/admin/topology/views/${id}`, { name, description }).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['topology', 'views'] }),
+  })
+}
+
+export function useDeleteTopologyView() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/api/admin/topology/views/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['topology', 'views'] }),
+  })
+}
+
 // ── User-facing hooks (role-aware, /api/topology) ─────────────────────────────
 
-export function useTopologyGroups() {
+export function useTopologyGroups(viewId: number) {
   return useQuery<NetworkGroupDto[]>({
-    queryKey: ['topology', 'groups'],
-    queryFn: () => api.get<NetworkGroupDto[]>('/api/topology/groups').then(r => r.data),
+    queryKey: ['topology', 'groups', viewId],
+    queryFn: () => api.get<NetworkGroupDto[]>('/api/topology/groups', { params: { viewId } }).then(r => r.data),
     staleTime: 30_000,
   })
 }
 
-export function useTopologyDevices() {
+export function useTopologyDevices(viewId: number) {
   return useQuery<NetworkDeviceDto[]>({
-    queryKey: ['topology', 'devices'],
-    queryFn: () => api.get<NetworkDeviceDto[]>('/api/topology/devices').then(r => r.data),
+    queryKey: ['topology', 'devices', viewId],
+    queryFn: () => api.get<NetworkDeviceDto[]>('/api/topology/devices', { params: { viewId } }).then(r => r.data),
     staleTime: 30_000,
   })
 }
 
-export function useTopologyConnections() {
+export function useTopologyConnections(viewId: number) {
   return useQuery<NetworkConnectionDto[]>({
-    queryKey: ['topology', 'connections'],
-    queryFn: () => api.get<NetworkConnectionDto[]>('/api/topology/connections').then(r => r.data),
+    queryKey: ['topology', 'connections', viewId],
+    queryFn: () => api.get<NetworkConnectionDto[]>('/api/topology/connections', { params: { viewId } }).then(r => r.data),
     staleTime: 30_000,
   })
 }
@@ -152,18 +196,18 @@ export function useSaveDevicePosition() {
 
 // ── Admin-only hooks (/api/admin/topology) ────────────────────────────────────
 
-export function useAdminTopologyGroups() {
+export function useAdminTopologyGroups(viewId: number) {
   return useQuery<NetworkGroupDto[]>({
-    queryKey: ['admin', 'topology', 'groups'],
-    queryFn: () => api.get<NetworkGroupDto[]>('/api/admin/topology/groups').then(r => r.data),
+    queryKey: ['admin', 'topology', 'groups', viewId],
+    queryFn: () => api.get<NetworkGroupDto[]>('/api/admin/topology/groups', { params: { viewId } }).then(r => r.data),
   })
 }
 
 export function useCreateTopologyGroup() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateGroupInput) =>
-      api.post<NetworkGroupDto>('/api/admin/topology/groups', data).then(r => r.data),
+    mutationFn: ({ data, viewId }: { data: CreateGroupInput; viewId: number }) =>
+      api.post<NetworkGroupDto>('/api/admin/topology/groups', data, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'groups'] })
       qc.invalidateQueries({ queryKey: ['topology', 'groups'] })
@@ -194,18 +238,18 @@ export function useDeleteTopologyGroup() {
   })
 }
 
-export function useAdminTopologyDevices() {
+export function useAdminTopologyDevices(viewId: number) {
   return useQuery<NetworkDeviceDto[]>({
-    queryKey: ['admin', 'topology', 'devices'],
-    queryFn: () => api.get<NetworkDeviceDto[]>('/api/admin/topology/devices').then(r => r.data),
+    queryKey: ['admin', 'topology', 'devices', viewId],
+    queryFn: () => api.get<NetworkDeviceDto[]>('/api/admin/topology/devices', { params: { viewId } }).then(r => r.data),
   })
 }
 
 export function useCreateTopologyDevice() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateDeviceInput) =>
-      api.post<NetworkDeviceDto>('/api/admin/topology/devices', data).then(r => r.data),
+    mutationFn: ({ data, viewId }: { data: CreateDeviceInput; viewId: number }) =>
+      api.post<NetworkDeviceDto>('/api/admin/topology/devices', data, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
@@ -242,14 +286,16 @@ export function useImportScanToTopology() {
     mutationFn: ({
       devices,
       targetGroupId,
+      viewId,
     }: {
       devices: { ipAddress: string; hostname: string | null; latencyMs: number; openPorts?: number[] }[]
       targetGroupId?: number | null
+      viewId: number
     }) =>
       api.post<{ imported: number }>('/api/admin/topology/devices/import-scan', {
         devices,
         targetGroupId: targetGroupId ?? null,
-      }).then(r => r.data),
+      }, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
@@ -260,8 +306,8 @@ export function useImportScanToTopology() {
 export function useImportArpTable() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () =>
-      api.post<{ upserted: number }>('/api/admin/topology/scan/arp').then(r => r.data),
+    mutationFn: (viewId: number) =>
+      api.post<{ upserted: number }>('/api/admin/topology/scan/arp', null, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
@@ -274,8 +320,8 @@ export function useImportArpTable() {
 export function useImportNatConnections() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () =>
-      api.post<{ imported: number }>('/api/admin/topology/scan/nat-connections').then(r => r.data),
+    mutationFn: (viewId: number) =>
+      api.post<{ imported: number }>('/api/admin/topology/scan/nat-connections', null, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['topology', 'connections'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
@@ -288,8 +334,8 @@ export function useImportNatConnections() {
 export function useImportFirewallConnections() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () =>
-      api.post<{ imported: number }>('/api/admin/topology/scan/firewall-connections').then(r => r.data),
+    mutationFn: (viewId: number) =>
+      api.post<{ imported: number }>('/api/admin/topology/scan/firewall-connections', null, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['topology', 'connections'] })
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'connections'] })
@@ -306,8 +352,8 @@ export interface AutoScanResult {
 export function useAutoScan() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () =>
-      api.post<AutoScanResult>('/api/admin/topology/scan/auto').then(r => r.data),
+    mutationFn: (viewId: number) =>
+      api.post<AutoScanResult>('/api/admin/topology/scan/auto', null, { params: { viewId } }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['topology'] })
       qc.invalidateQueries({ queryKey: ['admin', 'topology'] })

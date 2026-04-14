@@ -1,9 +1,6 @@
 package com.hacksmc.controller;
 
-import com.hacksmc.dto.CreateNetworkConnectionRequest;
-import com.hacksmc.dto.NetworkConnectionDto;
-import com.hacksmc.dto.NetworkDeviceDto;
-import com.hacksmc.dto.NetworkGroupDto;
+import com.hacksmc.dto.*;
 import com.hacksmc.service.NetworkTopologyService;
 import com.hacksmc.service.TopologyBroadcastService;
 import jakarta.validation.Valid;
@@ -20,6 +17,7 @@ import java.util.Map;
 /**
  * Topology endpoints accessible to all authenticated users.
  * Results are filtered by role: admins see everything, users see their hosts + shared devices.
+ * All data endpoints accept an optional ?viewId= parameter (defaults to the Auto view, id=1).
  */
 @RestController
 @RequestMapping("/api/topology")
@@ -29,28 +27,36 @@ public class NetworkTopologyController {
     private final NetworkTopologyService topologyService;
     private final TopologyBroadcastService broadcastService;
 
-    /**
-     * SSE stream — clients subscribe here to receive real-time topology_changed events.
-     * Token is passed as ?token= query parameter because EventSource cannot set headers.
-     */
+    /** SSE stream for real-time topology_changed events. JWT via ?token= (EventSource limitation). */
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe() {
         return broadcastService.subscribe();
     }
 
+    /** List all available topology views (non-admin users can switch views too). */
+    @GetMapping("/views")
+    public List<TopologyViewDto> getViews() {
+        return topologyService.listViews();
+    }
+
     @GetMapping("/groups")
-    public List<NetworkGroupDto> getGroups() {
-        return topologyService.listGroups();
+    public List<NetworkGroupDto> getGroups(
+            @RequestParam(defaultValue = "1") Long viewId) {
+        return topologyService.listGroups(viewId);
     }
 
     @GetMapping("/devices")
-    public List<NetworkDeviceDto> getDevices(Principal principal) {
-        return topologyService.listVisibleDevices(principal.getName());
+    public List<NetworkDeviceDto> getDevices(
+            Principal principal,
+            @RequestParam(defaultValue = "1") Long viewId) {
+        return topologyService.listVisibleDevices(principal.getName(), viewId);
     }
 
     @GetMapping("/connections")
-    public List<NetworkConnectionDto> getConnections(Principal principal) {
-        return topologyService.listVisibleConnections(principal.getName());
+    public List<NetworkConnectionDto> getConnections(
+            Principal principal,
+            @RequestParam(defaultValue = "1") Long viewId) {
+        return topologyService.listVisibleConnections(principal.getName(), viewId);
     }
 
     @PostMapping("/connections")

@@ -33,6 +33,10 @@ public class NetworkGroup {
     @Column(nullable = false)
     private boolean scanBlocked;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "view_id", nullable = false)
+    private TopologyView view;
+
     @Column(nullable = false)
     private Instant createdAt;
 

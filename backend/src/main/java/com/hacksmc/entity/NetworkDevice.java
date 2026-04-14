@@ -56,6 +56,10 @@ public class NetworkDevice {
     @Column(name = "pf_sense_interface")
     private String pfSenseInterface;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "view_id", nullable = false)
+    private TopologyView view;
+
     @Column(nullable = false)
     private Instant createdAt;
 
