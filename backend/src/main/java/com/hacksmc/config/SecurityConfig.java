@@ -19,6 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.DispatcherType;
 import java.util.Arrays;
 import java.util.List;
 
@@ -60,6 +61,10 @@ public class SecurityConfig {
                             "frame-ancestors 'none';"));
                 })
                 .authorizeHttpRequests(auth -> auth
+                        // Tomcat async re-dispatches the SSE response through the filter chain;
+                        // at that point there is no JWT in the request, so we must allow ASYNC
+                        // dispatches unconditionally to avoid "Access Denied" on the SSE stream.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/docs/**", "/api/swagger-ui/**").permitAll()
                         .requestMatchers("/internal/**").permitAll()

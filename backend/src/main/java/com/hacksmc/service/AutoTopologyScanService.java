@@ -112,7 +112,14 @@ public class AutoTopologyScanService {
             log.warn("Auto Scan [FW] view={} failed: {}", viewId, e.getMessage());
         }
 
-        // Step 4 — Topology inference: build INTERNET → (ROUTER →) FIREWALL → subnets hierarchy
+        // Step 4 — Ensure FIREWALL device exists (pfSense itself is not in its own ARP table)
+        try {
+            topologyService.getOrCreateFirewallDevice(viewId);
+        } catch (Exception e) {
+            log.warn("Auto Scan [FIREWALL] view={} failed: {}", viewId, e.getMessage());
+        }
+
+        // Step 5 — Topology inference: build INTERNET → (ROUTER →) FIREWALL → subnets hierarchy
         int inferred = inferTopologyConnections(viewId);
         totalConnections += inferred;
         log.info("Auto Scan [Inference] view={}: {} connections inferred", viewId, inferred);

@@ -353,7 +353,19 @@ function TopologyInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
 
-  useEffect(() => { setNodes(rfNodes) }, [rfNodes, setNodes])
+  // When server data changes, sync nodes — but preserve the in-flight position of any
+  // node currently being dragged so an SSE-triggered refetch doesn't snap it back.
+  const draggingDeviceIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    const draggingId = draggingDeviceIdRef.current
+    setNodes(prev =>
+      rfNodes.map(n =>
+        draggingId != null && n.id === String(draggingId)
+          ? { ...n, position: prev.find(p => p.id === n.id)?.position ?? n.position }
+          : n,
+      ),
+    )
+  }, [rfNodes, setNodes])
   useEffect(() => { setEdges(rfEdges) }, [rfEdges, setEdges])
 
   // ── Event handlers ────────────────────────────────────────────────────────
@@ -380,12 +392,14 @@ function TopologyInner() {
     if (node.type !== 'deviceNode') return
     const id = Number(node.id)
     dragStartPositions.current.set(id, { x: node.position.x, y: node.position.y })
+    draggingDeviceIdRef.current = id
     setDraggingDeviceId(id)
   }, [])
 
   const handleNodeDragStop: OnNodeDrag = useCallback((event, node) => {
     if (node.type !== 'deviceNode') return
     const id = Number(node.id)
+    draggingDeviceIdRef.current = null
     setDraggingDeviceId(null)
 
     // ── Drag-to-assign: check if released over a sidebar group row ───────────
@@ -716,13 +730,34 @@ function TopologyInner() {
   }
 
   function handleDeleteView(id: number) {
-    deleteView.mutate(id, {
-      onSuccess: () => {
-        if (selectedViewId === id) setSelectedViewId(1)
-        toast({ title: 'Ansicht gelöscht' })
-      },
-      onError: () => toast({ title: 'Fehler beim Löschen der Ansicht', variant: 'destructive' }),
+    const viewName = (views ?? []).find(v => v.id === id)?.name ?? `#${id}`
+    const key = `view-${id}`
+    const existing = pendingDeletes.current.get(key)
+    if (existing) { clearTimeout(existing); pendingDeletes.current.delete(key); return }
+
+    const { dismiss } = toast({
+      title: `Ansicht "${viewName}" wird gelöscht`,
+      description: 'Klicke Rückgängig um abzubrechen.',
+      duration: 5000,
+      action: (
+        <ToastAction altText="Rückgängig" onClick={() => {
+          clearTimeout(pendingDeletes.current.get(key))
+          pendingDeletes.current.delete(key)
+          dismiss()
+        }}>
+          Rückgängig
+        </ToastAction>
+      ),
     })
+
+    const timer = setTimeout(() => {
+      pendingDeletes.current.delete(key)
+      if (selectedViewId === id) setSelectedViewId(1)
+      deleteView.mutate(id, {
+        onError: () => toast({ title: 'Fehler beim Löschen der Ansicht', variant: 'destructive' }),
+      })
+    }, 5000)
+    pendingDeletes.current.set(key, timer)
   }
 
   function handleRenameView(id: number, name: string) {

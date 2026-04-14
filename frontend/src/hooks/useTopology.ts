@@ -188,9 +188,18 @@ export function useDeleteConnection() {
 }
 
 export function useSaveDevicePosition() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, posX, posY }: { id: number; posX: number; posY: number }) =>
       api.patch(`/api/topology/devices/${id}/position`, { posX, posY }),
+    onSuccess: (_, { id, posX, posY }) => {
+      // Write new coordinates back into all cached device lists so that
+      // rfNodes doesn't snap back to stale DB values on next recompute.
+      qc.setQueriesData<NetworkDeviceDto[]>(
+        { queryKey: ['topology', 'devices'], exact: false },
+        old => old?.map(d => d.id === id ? { ...d, posX, posY } : d),
+      )
+    },
   })
 }
 

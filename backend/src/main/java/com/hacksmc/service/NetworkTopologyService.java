@@ -278,6 +278,7 @@ public class NetworkTopologyService {
         List<Map<String, Object>> pfRules = pfSenseApiClient.fetchAllNatPortForwardRules();
         if (pfRules.isEmpty()) return 0;
 
+        TopologyView view = getView(viewId);
         NetworkDevice internet = getOrCreateInternetDevice(viewId);
 
         Map<String, NatRule> hsmcRuleMap = new java.util.HashMap<>();
@@ -294,8 +295,18 @@ public class NetworkTopologyService {
             String protocol = toStr(rule.get("protocol"));
             String descr = toStr(rule.get("descr"));
 
-            NetworkDevice target = deviceRepo.findByIpAddressAndViewId(targetIp, viewId).orElse(null);
-            if (target == null) continue;
+            // Find or auto-create the target device — all pfSense NAT rules are included,
+            // not just those managed by HackSMC.
+            NetworkDevice target = deviceRepo.findByIpAddressAndViewId(targetIp, viewId).orElseGet(() -> {
+                NetworkDevice d = new NetworkDevice();
+                d.setName(targetIp);
+                d.setIpAddress(targetIp);
+                d.setDeviceType("HOST");
+                d.setManual(false);
+                d.setShared(true);
+                d.setView(view);
+                return deviceRepo.save(d);
+            });
 
             if (connectionRepo.existsBySourceIdAndTargetIdAndPortStart(
                     internet.getId(), target.getId(), portStart)) continue;
@@ -434,6 +445,38 @@ public class NetworkTopologyService {
         });
     }
 
+    /**
+     * Ensures a FIREWALL device exists for the pfSense host itself.
+     * The pfSense appliance doesn't appear in its own ARP table, so it must be
+     * created explicitly using the configured PFSENSE_BASE_URL host.
+     */
+    public NetworkDevice getOrCreateFirewallDevice(Long viewId) {
+        TopologyView view = getView(viewId);
+        // Check if any FIREWALL-typed device already exists in this view
+        List<NetworkDevice> all = deviceRepo.findByViewIdOrderByCreatedAtAsc(viewId);
+        return all.stream()
+                .filter(d -> "FIREWALL".equals(d.getDeviceType()))
+                .findFirst()
+                .orElseGet(() -> {
+                    // Extract IP from pfSense base URL
+                    String host = pfSenseBaseUrl;
+                    try {
+                        host = java.net.URI.create(pfSenseBaseUrl).getHost();
+                    } catch (Exception ignored) {}
+                    NetworkDevice d = new NetworkDevice();
+                    d.setName("pfSense");
+                    d.setIpAddress(host);
+                    d.setDescription("pfSense Firewall / Router");
+                    d.setDeviceType("FIREWALL");
+                    d.setManual(true);
+                    d.setShared(true);
+                    d.setPosX(400);
+                    d.setPosY(150);
+                    d.setView(view);
+                    return deviceRepo.save(d);
+                });
+    }
+
     // ── Devices (user-visible) ────────────────────────────────────────────────
 
     public List<NetworkDeviceDto> listVisibleDevices(String username, Long viewId) {
@@ -547,15 +590,18 @@ public class NetworkTopologyService {
         NetworkDevice d = deviceRepo.findById(deviceId)
                 .orElseThrow(() -> new NoSuchElementException("Device not found: " + deviceId));
         if (!isAdmin(user)) {
+            // Non-admins may only move their own host devices or shared devices
             Set<Long> userHostIds = policyRepo.findByUserIdWithHost(user.getId()).stream()
                     .map(p -> p.getHost().getId()).collect(Collectors.toSet());
-            if (d.getHost() == null || !userHostIds.contains(d.getHost().getId())) {
+            if (!d.isShared() && (d.getHost() == null || !userHostIds.contains(d.getHost().getId()))) {
                 throw new AccessDeniedException("Cannot move this device");
             }
         }
         d.setPosX(posX);
         d.setPosY(posY);
         deviceRepo.save(d);
+        // Broadcast so other connected clients refresh positions in real-time
+        broadcastService.broadcast(currentActor(), "DEVICE_UPDATED", d.getName());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
