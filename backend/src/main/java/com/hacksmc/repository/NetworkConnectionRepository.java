@@ -17,4 +17,7 @@ public interface NetworkConnectionRepository extends JpaRepository<NetworkConnec
     List<NetworkConnection> findByDeviceId(@Param("deviceId") Long deviceId);
 
     boolean existsBySourceIdAndTargetIdAndPortStart(Long sourceId, Long targetId, Integer portStart);
+
+    /** Checks if any connection exists between two devices, regardless of port. */
+    boolean existsBySourceIdAndTargetId(Long sourceId, Long targetId);
 }

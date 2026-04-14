@@ -32,6 +32,7 @@ import {
   useImportArpTable,
   useImportNatConnections,
   useImportFirewallConnections,
+  useAutoScan,
   usePatchTopologyDevice,
   useTopologyEvents,
   type NetworkConnectionDto,
@@ -190,6 +191,7 @@ function TopologyInner() {
   const importArp = useImportArpTable()
   const importNat = useImportNatConnections()
   const importFw = useImportFirewallConnections()
+  const autoScan = useAutoScan()
 
   // ── UI State ──────────────────────────────────────────────────────────────
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null)
@@ -562,6 +564,31 @@ function TopologyInner() {
     })
   }
 
+  function handleAutoScan() {
+    autoScan.mutate(undefined, {
+      onSuccess: (data) => {
+        // Auto-apply hierarchical layout immediately after scan completes
+        // (nodes/edges will have been refreshed by query invalidation)
+        setTimeout(() => {
+          handleAutoLayout()
+        }, 300)
+        toast({
+          title: 'Auto Scan abgeschlossen',
+          description: [
+            data.devices > 0 && `${data.devices} Gerät${data.devices !== 1 ? 'e' : ''} importiert`,
+            data.connections > 0 && `${data.connections} Verbindung${data.connections !== 1 ? 'en' : ''} erstellt`,
+            data.grouped > 0 && `${data.grouped} Gerät${data.grouped !== 1 ? 'e' : ''} gruppiert`,
+          ].filter(Boolean).join(' · ') || 'Keine Änderungen',
+          duration: 6000,
+        })
+      },
+      onError: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Unbekannter Fehler'
+        toast({ title: 'Auto Scan fehlgeschlagen', description: msg, variant: 'destructive' })
+      },
+    })
+  }
+
   function handleAutoLayout(direction?: 'TB' | 'LR') {
     if (!devices?.length) return
     const dir = direction ?? layoutDirection
@@ -675,6 +702,7 @@ function TopologyInner() {
         isAdmin={isAdmin}
         showLegend={showLegend}
         onToggleLegend={() => setShowLegend(v => !v)}
+        onAutoScanClick={handleAutoScan}
         onScanClick={() => setShowScan(true)}
         onArpClick={handleArpImport}
         onNatImportClick={handleNatImport}
@@ -686,6 +714,7 @@ function TopologyInner() {
         layoutDirection={layoutDirection}
         onToggleLayoutDirection={handleToggleLayoutDirection}
         onlineCount={onlineCount}
+        autoScanLoading={autoScan.isPending}
         arpLoading={importArp.isPending}
         natImportLoading={importNat.isPending}
         firewallImportLoading={importFw.isPending}

@@ -1,6 +1,7 @@
 package com.hacksmc.controller;
 
 import com.hacksmc.dto.*;
+import com.hacksmc.service.AutoTopologyScanService;
 import com.hacksmc.service.NetworkTopologyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.util.Map;
 public class NetworkTopologyAdminController {
 
     private final NetworkTopologyService topologyService;
+    private final AutoTopologyScanService autoTopologyScanService;
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -115,5 +117,22 @@ public class NetworkTopologyAdminController {
     public Map<String, Integer> importFirewallConnections() {
         int imported = topologyService.importFirewallRulesAsConnections();
         return Map.of("imported", imported);
+    }
+
+    // ── Full automatic discovery pipeline ─────────────────────────────────────
+
+    /**
+     * Runs the complete Auto Scan pipeline in a single request:
+     * ARP → NAT/FW connections → topology inference → auto-grouping.
+     * Returns aggregate counts for the frontend summary toast.
+     */
+    @PostMapping("/scan/auto")
+    public Map<String, Integer> autoScan() {
+        AutoTopologyScanService.AutoScanResult result = autoTopologyScanService.autoScan();
+        return Map.of(
+                "devices",     result.devices(),
+                "connections", result.connections(),
+                "grouped",     result.grouped()
+        );
     }
 }

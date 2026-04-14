@@ -297,6 +297,24 @@ export function useImportFirewallConnections() {
   })
 }
 
+export interface AutoScanResult {
+  devices: number
+  connections: number
+  grouped: number
+}
+
+export function useAutoScan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      api.post<AutoScanResult>('/api/admin/topology/scan/auto').then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['topology'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'topology'] })
+    },
+  })
+}
+
 export function useAdminTopologyConnections() {
   return useQuery<NetworkConnectionDto[]>({
     queryKey: ['admin', 'topology', 'connections'],
