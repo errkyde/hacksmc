@@ -226,11 +226,14 @@ function TopologyInner() {
     return map
   }, [groups])
 
+  // Hidden groups: non-admins don't see those devices at all;
+  // admins see them dimmed (so edges between hidden-group devices remain visible).
   const hiddenGroupIds = useMemo(() => {
+    if (isAdmin) return new Set<number>()
     const s = new Set<number>()
     ;(groups ?? []).filter(g => g.hidden).forEach(g => s.add(g.id))
     return s
-  }, [groups])
+  }, [groups, isAdmin])
 
   // ── Connection status per device (derived from connections list) ──────────
   const deviceConnStatus = useMemo(() => {
@@ -260,10 +263,14 @@ function TopologyInner() {
         )
       : allDevices
 
+    // For non-admins, completely exclude hidden-group devices.
+    // For admins, hiddenGroupIds is always empty (see above), so all devices are included.
     const visible = filtered.filter(d => d.groupId == null || !hiddenGroupIds.has(d.groupId))
 
     return visible.map(d => {
       const groupColor = d.groupId != null ? groupColorMap.get(d.groupId) : undefined
+      const inHiddenGroup = isAdmin && d.groupId != null &&
+        (groups ?? []).some(g => g.id === d.groupId && g.hidden)
       const inFocusedGroup = focusedGroupId === null || d.groupId === focusedGroupId
       const dimmedByGroup = !inFocusedGroup
       const dimmedByNode = focusedNodeId !== null &&
@@ -277,7 +284,8 @@ function TopologyInner() {
         data: {
           device: d,
           groupColor,
-          dimmed: dimmedByGroup || dimmedByNode,
+          // Devices in hidden groups are shown to admins but heavily dimmed
+          dimmed: dimmedByGroup || dimmedByNode || inHiddenGroup,
           highlighted: String(d.id) === highlightedNodeId,
           connStatus: (() => {
             const s = deviceConnStatus.get(d.id)
@@ -292,36 +300,41 @@ function TopologyInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, groupColorMap, hiddenGroupIds, focusedGroupId, search, selectedDeviceId, focusedNodeId, connections, highlightedNodeId, deviceConnStatus])
 
-  const rfEdges: Edge[] = useMemo(() =>
-    (connections ?? []).map(c => {
-      const label = c.label ?? (c.protocol && c.portStart
-        ? `${c.protocol}:${c.portStart}${c.portEnd && c.portEnd !== c.portStart ? `-${c.portEnd}` : ''}`
-        : undefined)
-      const dimmedByNode = focusedNodeId !== null &&
-        focusedNodeId !== String(c.sourceDeviceId) &&
-        focusedNodeId !== String(c.targetDeviceId)
-      const dimmedByGroup = focusedGroupId !== null && (() => {
-        const srcDevice = (devices ?? []).find(d => d.id === c.sourceDeviceId)
-        const tgtDevice = (devices ?? []).find(d => d.id === c.targetDeviceId)
-        return srcDevice?.groupId !== focusedGroupId && tgtDevice?.groupId !== focusedGroupId
-      })()
-      return {
-        id: String(c.id),
-        source: String(c.sourceDeviceId),
-        target: String(c.targetDeviceId),
-        label,
-        labelStyle: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' },
-        style: {
-          stroke: edgeColor(c),
-          opacity: dimmedByNode || dimmedByGroup ? 0.1 : 1,
-          strokeWidth: 2,
-        },
-        animated: c.natRuleId != null && c.status === 'OK',
-        data: { connection: c },
-      }
-    }),
-    [connections, focusedNodeId, focusedGroupId, devices],
-  )
+  const rfEdges: Edge[] = useMemo(() => {
+    // Build a set of currently visible node IDs so we can filter orphan edges.
+    // React Flow silently drops edges whose source/target node doesn't exist,
+    // which causes connections to disappear without any error.
+    const visibleNodeIds = new Set(rfNodes.map(n => n.id))
+    return (connections ?? [])
+      .filter(c => visibleNodeIds.has(String(c.sourceDeviceId)) && visibleNodeIds.has(String(c.targetDeviceId)))
+      .map(c => {
+        const label = c.label ?? (c.protocol && c.portStart
+          ? `${c.protocol}:${c.portStart}${c.portEnd && c.portEnd !== c.portStart ? `-${c.portEnd}` : ''}`
+          : undefined)
+        const dimmedByNode = focusedNodeId !== null &&
+          focusedNodeId !== String(c.sourceDeviceId) &&
+          focusedNodeId !== String(c.targetDeviceId)
+        const dimmedByGroup = focusedGroupId !== null && (() => {
+          const srcDevice = (devices ?? []).find(d => d.id === c.sourceDeviceId)
+          const tgtDevice = (devices ?? []).find(d => d.id === c.targetDeviceId)
+          return srcDevice?.groupId !== focusedGroupId && tgtDevice?.groupId !== focusedGroupId
+        })()
+        return {
+          id: String(c.id),
+          source: String(c.sourceDeviceId),
+          target: String(c.targetDeviceId),
+          label,
+          labelStyle: { fontSize: 9, fill: 'hsl(var(--muted-foreground))' },
+          style: {
+            stroke: edgeColor(c),
+            opacity: dimmedByNode || dimmedByGroup ? 0.1 : 1,
+            strokeWidth: 2,
+          },
+          animated: c.natRuleId != null && c.status === 'OK',
+          data: { connection: c },
+        }
+      })
+  }, [rfNodes, connections, focusedNodeId, focusedGroupId, devices])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(rfNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges)
