@@ -21,7 +21,7 @@ public class PfSenseSyncService {
     private final NatRuleRepository natRuleRepository;
     private final PfSenseApiClient pfSenseApiClient;
 
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     @Transactional
     public void syncNatRules() {
         // tracker -> array index (position in pfSense)

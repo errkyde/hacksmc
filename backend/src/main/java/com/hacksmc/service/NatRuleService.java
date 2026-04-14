@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -78,7 +79,13 @@ public class NatRuleService {
         return rules;
     }
 
-    @Transactional
+    /**
+     * SERIALIZABLE isolation prevents the race condition where two concurrent requests
+     * both pass the port-range overlap check before either commits.
+     * Under high contention one transaction will fail with a serialization error —
+     * the caller receives a 409 Conflict via GlobalExceptionHandler.
+     */
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public NatRule createRule(String username, CreateNatRuleRequest request) {
         if (maintenanceService.getSettings().isPfSenseMaintenance()) {
             throw new com.hacksmc.exception.MaintenanceException("pfSense befindet sich im Wartungsmodus — bitte später erneut versuchen");

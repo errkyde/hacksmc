@@ -18,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.time.Instant;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
@@ -57,7 +58,7 @@ public class PfSenseApiClient {
 
         JdkClientHttpRequestFactory requestFactory = trustAllCerts
                 ? trustAllCertsRequestFactory()
-                : new JdkClientHttpRequestFactory(HttpClient.newBuilder().build());
+                : buildRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build());
 
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
@@ -468,6 +469,12 @@ public class PfSenseApiClient {
         }
     }
 
+    private static JdkClientHttpRequestFactory buildRequestFactory(HttpClient httpClient) {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(Duration.ofSeconds(10));
+        return factory;
+    }
+
     private JdkClientHttpRequestFactory trustAllCertsRequestFactory() {
         try {
             System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
@@ -481,10 +488,11 @@ public class PfSenseApiClient {
 
             HttpClient httpClient = HttpClient.newBuilder()
                     .sslContext(sslContext)
+                    .connectTimeout(Duration.ofSeconds(8))
                     .build();
 
             log.warn("pfSense client: trust-all-certs is enabled — use only in development!");
-            return new JdkClientHttpRequestFactory(httpClient);
+            return buildRequestFactory(httpClient);
         } catch (Exception e) {
             throw new RuntimeException("Failed to create trust-all SSL context", e);
         }

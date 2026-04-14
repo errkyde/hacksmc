@@ -32,5 +32,40 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // Warm commonly imported modules so first page load is faster
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/App.tsx',
+        './src/pages/TopologyPage.tsx',
+        './src/pages/DashboardPage.tsx',
+      ],
+    },
+  },
+  build: {
+    // Parallel chunk processing (uses all available CPU cores)
+    minify: 'esbuild',
+    target: 'es2020',
+    rollupOptions: {
+      output: {
+        // Split large deps into separate chunks for better caching
+        manualChunks: {
+          'react-vendor':   ['react', 'react-dom', 'react-router-dom'],
+          'query-vendor':   ['@tanstack/react-query'],
+          'flow-vendor':    ['@xyflow/react'],
+          'radix-vendor':   [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-label',
+            '@radix-ui/react-select',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-toast',
+          ],
+          'icons-vendor':   ['lucide-react'],
+        },
+      },
+    },
+    // Don't warn on chunks under 800 kB
+    chunkSizeWarningLimit: 800,
   },
 })

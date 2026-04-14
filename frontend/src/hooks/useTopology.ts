@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
@@ -238,8 +239,17 @@ export function useDeleteTopologyDevice() {
 export function useImportScanToTopology() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (devices: { ipAddress: string; hostname: string | null; latencyMs: number; openPorts?: number[] }[]) =>
-      api.post<{ imported: number }>('/api/admin/topology/devices/import-scan', { devices }).then(r => r.data),
+    mutationFn: ({
+      devices,
+      targetGroupId,
+    }: {
+      devices: { ipAddress: string; hostname: string | null; latencyMs: number; openPorts?: number[] }[]
+      targetGroupId?: number | null
+    }) =>
+      api.post<{ imported: number }>('/api/admin/topology/devices/import-scan', {
+        devices,
+        targetGroupId: targetGroupId ?? null,
+      }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'topology', 'devices'] })
       qc.invalidateQueries({ queryKey: ['topology', 'devices'] })
@@ -315,6 +325,65 @@ export function useDeleteAdminTopologyConnection() {
       qc.invalidateQueries({ queryKey: ['topology', 'connections'] })
     },
   })
+}
+
+// ── Real-time SSE updates ─────────────────────────────────────────────────────
+
+export interface TopologyEvent {
+  actor: string
+  action: string
+  entity?: string
+  ts: string
+  onlineCount?: number
+}
+
+/**
+ * Opens a persistent SSE connection to receive topology_changed events.
+ * Invalidates query caches on every change, calls onEvent for attribution toasts,
+ * and tracks the online user count from heartbeat/event payloads.
+ */
+export function useTopologyEvents(onEvent?: (event: TopologyEvent) => void) {
+  const qc = useQueryClient()
+  const [onlineCount, setOnlineCount] = useState<number | null>(null)
+
+  // Keep onEvent in a ref so the effect doesn't need to re-subscribe when it changes
+  const onEventRef = useRef(onEvent)
+  useEffect(() => { onEventRef.current = onEvent }, [onEvent])
+
+  useEffect(() => {
+    const token = localStorage.getItem('hacksmc_token')
+    if (!token) return
+
+    const url = `/api/topology/events?token=${encodeURIComponent(token)}`
+    const es = new EventSource(url)
+
+    const handleCountEvent = (e: Event) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data)
+        if (data.onlineCount != null) setOnlineCount(data.onlineCount)
+      } catch { /* ignore malformed */ }
+    }
+
+    es.addEventListener('connected', handleCountEvent)
+    es.addEventListener('heartbeat', handleCountEvent)
+    es.addEventListener('online_count', handleCountEvent)
+
+    es.addEventListener('topology_changed', (e: Event) => {
+      try {
+        const data: TopologyEvent = JSON.parse((e as MessageEvent).data)
+        if (data.onlineCount != null) setOnlineCount(data.onlineCount)
+        qc.invalidateQueries({ queryKey: ['topology'] })
+        qc.invalidateQueries({ queryKey: ['admin', 'topology'] })
+        onEventRef.current?.(data)
+      } catch { /* ignore */ }
+    })
+
+    es.onerror = () => { /* EventSource reconnects automatically */ }
+
+    return () => es.close()
+  }, [qc])
+
+  return { onlineCount }
 }
 
 // ── Client-side device type inference (mirrors backend DeviceTypeDetector) ─────

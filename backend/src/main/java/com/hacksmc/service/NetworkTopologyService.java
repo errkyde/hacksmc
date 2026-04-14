@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,7 @@ public class NetworkTopologyService {
     private final AdminService adminService;
     private final PfSenseApiClient pfSenseApiClient;
     private final DeviceTypeDetector deviceTypeDetector;
+    private final TopologyBroadcastService broadcastService;
 
     @Value("${hacksmc.pfsense.base-url}")
     private String pfSenseBaseUrl;
@@ -52,7 +54,9 @@ public class NetworkTopologyService {
         g.setName(req.name());
         g.setColor(req.color() != null ? req.color() : "#64748b");
         g.setLayerOrder(req.layerOrder());
-        return toDto(groupRepo.save(g));
+        NetworkGroupDto dto = toDto(groupRepo.save(g));
+        broadcastService.broadcast(currentActor(), "GROUP_CREATED", g.getName());
+        return dto;
     }
 
     public NetworkGroupDto updateGroup(Long id, UpdateNetworkGroupRequest req) {
@@ -64,12 +68,17 @@ public class NetworkTopologyService {
         if (req.collapsed() != null) g.setCollapsed(req.collapsed());
         if (req.hidden() != null) g.setHidden(req.hidden());
         if (req.scanBlocked() != null) g.setScanBlocked(req.scanBlocked());
-        return toDto(groupRepo.save(g));
+        NetworkGroupDto dto = toDto(groupRepo.save(g));
+        broadcastService.broadcast(currentActor(), "GROUP_UPDATED", g.getName());
+        return dto;
     }
 
     public void deleteGroup(Long id) {
-        if (!groupRepo.existsById(id)) throw new NoSuchElementException("Group not found: " + id);
+        NetworkGroup g = groupRepo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Group not found: " + id));
+        String name = g.getName();
         groupRepo.deleteById(id);
+        broadcastService.broadcast(currentActor(), "GROUP_DELETED", name);
     }
 
     // ── Devices (admin) ───────────────────────────────────────────────────────
@@ -97,7 +106,9 @@ public class NetworkTopologyService {
         if (req.hostId() != null) {
             d.setHost(hostRepo.getReferenceById(req.hostId()));
         }
-        return toDto(deviceRepo.save(d));
+        NetworkDeviceDto dto = toDto(deviceRepo.save(d));
+        broadcastService.broadcast(currentActor(), "DEVICE_CREATED", d.getName());
+        return dto;
     }
 
     public NetworkDeviceDto patchDevice(Long id, PatchNetworkDeviceRequest req) {
@@ -120,31 +131,51 @@ public class NetworkTopologyService {
                         .orElseThrow(() -> new NoSuchElementException("Group not found: " + req.groupId())));
             }
         }
-        return toDto(deviceRepo.save(d));
+        NetworkDeviceDto dto = toDto(deviceRepo.save(d));
+        broadcastService.broadcast(currentActor(), "DEVICE_UPDATED", d.getName());
+        return dto;
     }
 
     public void deleteDevice(Long id) {
-        if (!deviceRepo.existsById(id)) throw new NoSuchElementException("Device not found: " + id);
+        NetworkDevice d = deviceRepo.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Device not found: " + id));
+        String name = d.getName();
         deviceRepo.deleteById(id);
+        broadcastService.broadcast(currentActor(), "DEVICE_DELETED", name);
     }
 
-    public int importFromScan(List<ScannedHostResult> results) {
-        int count = 0;
+    public int importFromScan(List<ScannedHostResult> results, Long targetGroupId) {
+        NetworkGroup targetGroup = targetGroupId != null
+                ? groupRepo.findById(targetGroupId).orElse(null)
+                : null;
+        int[] count = {0};
         for (ScannedHostResult r : results) {
             if (r.getIpAddress() == null) continue;
-            if (deviceRepo.existsByIpAddress(r.getIpAddress())) continue;
             String type = deviceTypeDetector.detect(r.getIpAddress(), r.getOpenPorts(), pfSenseBaseUrl);
-            NetworkDevice d = new NetworkDevice();
-            d.setName(r.getHostname() != null ? r.getHostname() : r.getIpAddress());
-            d.setIpAddress(r.getIpAddress());
-            d.setHostname(r.getHostname());
-            d.setDeviceType(type);
-            d.setManual(false);
-            d.setShared(false);
-            deviceRepo.save(d);
-            count++;
+            final NetworkGroup finalGroup = targetGroup;
+            deviceRepo.findByIpAddress(r.getIpAddress()).ifPresentOrElse(
+                    existing -> {
+                        // Update existing device hostname and group if not already set
+                        if (r.getHostname() != null && !r.getHostname().isBlank()) existing.setHostname(r.getHostname());
+                        if (finalGroup != null && existing.getGroup() == null) existing.setGroup(finalGroup);
+                        deviceRepo.save(existing);
+                    },
+                    () -> {
+                        NetworkDevice d = new NetworkDevice();
+                        d.setName(r.getHostname() != null && !r.getHostname().isBlank() ? r.getHostname() : r.getIpAddress());
+                        d.setIpAddress(r.getIpAddress());
+                        d.setHostname(r.getHostname());
+                        d.setDeviceType(type);
+                        d.setManual(false);
+                        d.setShared(false);
+                        d.setGroup(finalGroup);
+                        deviceRepo.save(d);
+                        count[0]++;
+                    }
+            );
         }
-        return count;
+        if (count[0] > 0) broadcastService.broadcast(currentActor(), "SCAN_IMPORTED", count[0] + " Geräte");
+        return count[0];
     }
 
     public int importArpTable() {
@@ -212,6 +243,7 @@ public class NetworkTopologyService {
             count++;
         }
         log.info("ARP import: {} devices upserted across {} VLAN groups", count, ifaceGroupMap.size());
+        if (count > 0) broadcastService.broadcast(currentActor(), "ARP_IMPORTED", count + " Geräte");
         return count;
     }
 
@@ -272,6 +304,7 @@ public class NetworkTopologyService {
             count++;
         }
         log.info("NAT import: {} new topology connections created from {} pfSense rules", count, pfRules.size());
+        if (count > 0) broadcastService.broadcast(currentActor(), "NAT_IMPORTED", count + " Verbindungen");
         return count;
     }
 
@@ -386,6 +419,7 @@ public class NetworkTopologyService {
             }
         }
         log.info("Firewall import: {} new topology connections created from pfSense pass rules", count);
+        if (count > 0) broadcastService.broadcast(currentActor(), "FW_IMPORTED", count + " Verbindungen");
         return count;
     }
 
@@ -476,13 +510,17 @@ public class NetworkTopologyService {
         c.setPortStart(req.portStart());
         c.setPortEnd(req.portEnd());
         c.setLabel(req.label());
-        return toDto(connectionRepo.save(c));
+        NetworkConnectionDto dto = toDto(connectionRepo.save(c));
+        broadcastService.broadcast(currentActor(), "CONNECTION_CREATED", src.getName() + " → " + tgt.getName());
+        return dto;
     }
 
     public void deleteAdminConnection(Long id) {
         NetworkConnection c = connectionRepo.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Connection not found: " + id));
+        String label = c.getSource().getName() + " → " + c.getTarget().getName();
         connectionRepo.deleteById(id);
+        broadcastService.broadcast(currentActor(), "CONNECTION_DELETED", label);
     }
 
     // ── Connections (user) ────────────────────────────────────────────────────
@@ -520,7 +558,9 @@ public class NetworkTopologyService {
         c.setPortStart(req.portStart());
         c.setPortEnd(req.portEnd());
         c.setLabel(req.label());
-        return toDto(connectionRepo.save(c));
+        NetworkConnectionDto dto = toDto(connectionRepo.save(c));
+        broadcastService.broadcast(currentActor(), "CONNECTION_CREATED", src.getName() + " → " + tgt.getName());
+        return dto;
     }
 
     public void deleteUserConnection(String username, Long connectionId) {
@@ -550,7 +590,9 @@ public class NetworkTopologyService {
             }
         }
 
+        String label = c.getSource().getName() + " → " + c.getTarget().getName();
         connectionRepo.deleteById(connectionId);
+        broadcastService.broadcast(currentActor(), "CONNECTION_DELETED", label);
     }
 
     public void saveDevicePosition(String username, Long deviceId, double posX, double posY) {
@@ -609,5 +651,14 @@ public class NetworkTopologyService {
 
     private boolean isAdmin(User user) {
         return "ADMIN".equals(user.getRole());
+    }
+
+    /** Resolves the currently authenticated username from the security context. */
+    private String currentActor() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return auth.getName();
+        }
+        return null;
     }
 }

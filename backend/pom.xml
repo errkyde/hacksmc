@@ -113,6 +113,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- DevTools (hot-reload; excluded from production JAR automatically) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

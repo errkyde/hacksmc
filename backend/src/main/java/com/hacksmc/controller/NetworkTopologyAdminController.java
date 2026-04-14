@@ -70,7 +70,7 @@ public class NetworkTopologyAdminController {
 
     @PostMapping("/devices/import-scan")
     public Map<String, Integer> importScan(@RequestBody ImportScanRequest req) {
-        int imported = topologyService.importFromScan(req.devices());
+        int imported = topologyService.importFromScan(req.devices(), req.targetGroupId());
         return Map.of("imported", imported);
     }
 

@@ -5,10 +5,13 @@ import com.hacksmc.dto.NetworkConnectionDto;
 import com.hacksmc.dto.NetworkDeviceDto;
 import com.hacksmc.dto.NetworkGroupDto;
 import com.hacksmc.service.NetworkTopologyService;
+import com.hacksmc.service.TopologyBroadcastService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.security.Principal;
 import java.util.List;
@@ -24,6 +27,16 @@ import java.util.Map;
 public class NetworkTopologyController {
 
     private final NetworkTopologyService topologyService;
+    private final TopologyBroadcastService broadcastService;
+
+    /**
+     * SSE stream — clients subscribe here to receive real-time topology_changed events.
+     * Token is passed as ?token= query parameter because EventSource cannot set headers.
+     */
+    @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter subscribe() {
+        return broadcastService.subscribe();
+    }
 
     @GetMapping("/groups")
     public List<NetworkGroupDto> getGroups() {

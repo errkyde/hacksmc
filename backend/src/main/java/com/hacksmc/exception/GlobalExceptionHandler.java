@@ -4,6 +4,7 @@ import com.hacksmc.entity.ErrorLog;
 import com.hacksmc.exception.MaintenanceException;
 import com.hacksmc.repository.ErrorLogRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
@@ -50,8 +51,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex) {
-        // skip — login failures are too noisy
-        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        // Generic message prevents username enumeration via login error differentiation
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Ungültige Zugangsdaten");
+    }
+
+    /** Serialization failure from concurrent NAT rule creation (port-range overlap race). */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ProblemDetail handleSerializationFailure(PessimisticLockingFailureException ex, HttpServletRequest req) {
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Gleichzeitige Anfragen erkannt — bitte erneut versuchen");
+        persist(req, HttpStatus.CONFLICT.value(), ex);
+        return pd;
     }
 
     @ExceptionHandler(NoSuchElementException.class)
