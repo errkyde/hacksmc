@@ -312,18 +312,28 @@ public class NetworkTopologyService {
             try {
                 if (Boolean.TRUE.equals(rule.get("disabled"))) continue;
 
-                String iface = toStr(rule.get("interface"));
+                // pfSense v2 API: "interface" is a List for floating rules, String otherwise
+                Object ifaceRaw = rule.get("interface");
+                String iface;
+                if (ifaceRaw instanceof List<?> list) {
+                    if (list.isEmpty()) continue;
+                    iface = toStr(list.get(0));  // use first interface as representative
+                } else {
+                    iface = toStr(ifaceRaw);
+                }
+                if (iface == null) continue;
+
                 String protocol = toStr(rule.get("protocol"));
                 String descr = toStr(rule.get("descr"));
-                if (iface == null) continue;
 
                 boolean isWan = iface.equalsIgnoreCase("wan")
                         || iface.toLowerCase().startsWith("em0")
                         || iface.toLowerCase().startsWith("igb0")
                         || iface.toLowerCase().startsWith("re0");
 
-                String dstIp = extractIpFromRuleEndpoint(rule.get("dst"));
-                Integer dstPort = toPort(rule.get("dstport"));
+                // pfSense v2 API uses "destination" and "destination_port" (not "dst"/"dstport")
+                String dstIp = extractIpFromRuleEndpoint(rule.get("destination"));
+                Integer dstPort = toPort(rule.get("destination_port"));
 
                 NetworkDevice source;
                 NetworkDevice target;
@@ -396,9 +406,16 @@ public class NetworkTopologyService {
 
     @SuppressWarnings("unchecked")
     private static String extractIpFromRuleEndpoint(Object endpoint) {
+        if (endpoint == null) return null;
+        // pfSense v2: destination/source can be the string "any"
+        if (endpoint instanceof String s) {
+            return "any".equalsIgnoreCase(s.trim()) ? null : s.trim();
+        }
         if (endpoint instanceof Map<?, ?> m) {
-            if (m.containsKey("address")) return (String) m.get("address");
-            if (Boolean.TRUE.equals(m.get("any"))) return null;
+            // {address: "1.2.3.4", subnet: 32} — specific host/network
+            Object addr = m.get("address");
+            if (addr != null) return toStr(addr);
+            // {network: "opt1"} or {any: true} — no specific IP
         }
         return null;
     }
