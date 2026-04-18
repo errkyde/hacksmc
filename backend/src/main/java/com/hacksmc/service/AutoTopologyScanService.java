@@ -119,6 +119,13 @@ public class AutoTopologyScanService {
             log.warn("Auto Scan [FIREWALL] view={} failed: {}", viewId, e.getMessage());
         }
 
+        // Step 4b — Ensure ROUTER device exists (WAN gateway / upstream router)
+        try {
+            topologyService.getOrCreateRouterDevice(viewId);
+        } catch (Exception e) {
+            log.warn("Auto Scan [ROUTER] view={} failed: {}", viewId, e.getMessage());
+        }
+
         // Step 5 — Topology inference: build INTERNET → (ROUTER →) FIREWALL → subnets hierarchy
         int inferred = inferTopologyConnections(viewId);
         totalConnections += inferred;

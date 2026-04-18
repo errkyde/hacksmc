@@ -477,6 +477,48 @@ public class NetworkTopologyService {
                 });
     }
 
+    /**
+     * Ensures a ROUTER device exists for the upstream WAN gateway.
+     * The gateway IP is fetched from pfSense's routing API.
+     * If the API is unreachable or returns no gateway, this is a no-op.
+     */
+    public NetworkDevice getOrCreateRouterDevice(Long viewId) {
+        // If a ROUTER device already exists in this view, don't create another
+        List<NetworkDevice> all = deviceRepo.findByViewIdOrderByCreatedAtAsc(viewId);
+        Optional<NetworkDevice> existing = all.stream()
+                .filter(d -> "ROUTER".equals(d.getDeviceType()))
+                .findFirst();
+        if (existing.isPresent()) return existing.get();
+
+        String gatewayIp = pfSenseApiClient.fetchWanGatewayIp();
+        if (gatewayIp == null) {
+            log.info("getOrCreateRouterDevice view={}: no WAN gateway found, skipping", viewId);
+            return null;
+        }
+
+        TopologyView view = getView(viewId);
+        // Reuse existing device at that IP if one already exists (might be UNKNOWN type)
+        return deviceRepo.findByIpAddressAndViewId(gatewayIp, viewId).map(d -> {
+            d.setDeviceType("ROUTER");
+            d.setShared(true);
+            if (d.getName() == null || d.getName().equals(gatewayIp)) d.setName("Gateway");
+            return deviceRepo.save(d);
+        }).orElseGet(() -> {
+            NetworkDevice d = new NetworkDevice();
+            d.setName("Gateway");
+            d.setIpAddress(gatewayIp);
+            d.setDescription("WAN-Gateway / Upstream-Router");
+            d.setDeviceType("ROUTER");
+            d.setManual(true);
+            d.setShared(true);
+            d.setPosX(225);
+            d.setPosY(100);
+            d.setView(view);
+            log.info("getOrCreateRouterDevice view={}: created ROUTER {} ({})", viewId, d.getName(), gatewayIp);
+            return deviceRepo.save(d);
+        });
+    }
+
     // ── Devices (user-visible) ────────────────────────────────────────────────
 
     public List<NetworkDeviceDto> listVisibleDevices(String username, Long viewId) {

@@ -434,6 +434,75 @@ public class PfSenseApiClient {
         }
     }
 
+    /**
+     * Fetches the default WAN gateway IP from pfSense.
+     * Returns the IP of the gateway marked as default (defaultgw=true),
+     * or the first gateway on a WAN-like interface, or null if none found.
+     */
+    @SuppressWarnings("unchecked")
+    public String fetchWanGatewayIp() {
+        try {
+            Map<String, Object> response = restClient.get()
+                    .uri("/api/v2/routing/gateway")
+                    .retrieve()
+                    .body(Map.class);
+            if (response == null) return null;
+
+            Object dataRaw = response.get("data");
+            List<Map<String, Object>> gateways;
+            if (dataRaw instanceof List<?> list) {
+                gateways = (List<Map<String, Object>>) list;
+            } else if (dataRaw instanceof Map<?, ?> dataMap) {
+                Object items = ((Map<String, Object>) dataMap).get("items");
+                gateways = items instanceof List<?> il ? (List<Map<String, Object>>) il : List.of();
+            } else return null;
+
+            if (gateways.isEmpty()) return null;
+
+            // Prefer the gateway explicitly marked as default
+            for (Map<String, Object> gw : gateways) {
+                Object defRaw = gw.get("defaultgw");
+                if (defRaw == null) defRaw = gw.get("default");
+                if (Boolean.TRUE.equals(defRaw) || "true".equalsIgnoreCase(String.valueOf(defRaw))) {
+                    String ip = firstNonNull(gw, "gateway", "gw", "nexthop");
+                    if (ip != null && !ip.isBlank() && !"dynamic".equalsIgnoreCase(ip)) {
+                        log.info("WAN gateway (default): {}", ip);
+                        return ip;
+                    }
+                }
+            }
+
+            // Fallback: first gateway on a WAN-like interface
+            for (Map<String, Object> gw : gateways) {
+                String iface = firstNonNull(gw, "interface", "friendlyiface", "if");
+                if (iface != null && (iface.equalsIgnoreCase("wan")
+                        || iface.toLowerCase().startsWith("em0")
+                        || iface.toLowerCase().startsWith("igb0")
+                        || iface.toLowerCase().startsWith("re0"))) {
+                    String ip = firstNonNull(gw, "gateway", "gw", "nexthop");
+                    if (ip != null && !ip.isBlank() && !"dynamic".equalsIgnoreCase(ip)) {
+                        log.info("WAN gateway (by interface {}): {}", iface, ip);
+                        return ip;
+                    }
+                }
+            }
+
+            // Last resort: first gateway with a valid IP
+            for (Map<String, Object> gw : gateways) {
+                String ip = firstNonNull(gw, "gateway", "gw", "nexthop");
+                if (ip != null && !ip.isBlank() && !"dynamic".equalsIgnoreCase(ip)) {
+                    log.info("WAN gateway (first available): {}", ip);
+                    return ip;
+                }
+            }
+
+            return null;
+        } catch (Exception e) {
+            log.warn("Could not fetch pfSense WAN gateway (non-critical): {}", e.getMessage());
+            return null;
+        }
+    }
+
     /** Quick connectivity check against pfSense via TCP connect. Result cached for 5 minutes. */
     public PfSenseStatusResponse checkHealth() {
         if (Instant.now().isBefore(cacheExpiry) && cachedStatus != null) {
