@@ -4,6 +4,8 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+      - org.springframework.boot.autoconfigure.mail.MailSenderValidatorAutoConfiguration
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${PORT_POSTGRES:5432}/${DB_NAME:hacksmc}
     username: ${DB_USER:hacksmc}
@@ -38,6 +40,8 @@ spring:
 
 server:
   port: ${PORT_BACKEND:3000}
+  servlet:
+    load-on-startup: 1
 
 hacksmc:
   cors:

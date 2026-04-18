@@ -22,7 +22,7 @@ public class ExpiryScheduler {
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
 
-    @Scheduled(fixedRate = 60_000)
+    @Scheduled(fixedRate = 60_000, initialDelay = 60_000)
     @Transactional
     public void expireRules() {
         List<NatRule> expired = natRuleRepository.findByExpiresAtBeforeAndStatusIn(
