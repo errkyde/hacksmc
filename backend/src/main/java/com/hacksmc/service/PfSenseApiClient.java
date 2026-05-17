@@ -226,7 +226,7 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
-            log.error("pfSense fetchAllFirewallRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("pfSense fetchAllFirewallRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
         if (response == null || !response.containsKey("data")) return List.of();
@@ -269,7 +269,7 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
-            log.error("pfSense fetchAllNatPortForwardRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("pfSense fetchAllNatPortForwardRules failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
         if (response == null || !response.containsKey("data")) return List.of();
@@ -313,6 +313,16 @@ public class PfSenseApiClient {
     }
 
     private static String humanReadable(Exception e) {
+        // Check cause chain for UnknownHostException — JDK HttpClient wraps it so that
+        // ResourceAccessException.getMessage() ends with ": null" instead of the hostname
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.net.UnknownHostException) {
+                return "Host nicht auflösbar (DNS) – PFSENSE_BASE_URL prüfen";
+            }
+            if (t instanceof java.net.ConnectException) {
+                return "Verbindung abgelehnt – Port geschlossen oder Firewall blockiert";
+            }
+        }
         String msg = e.getMessage();
         if (msg == null) return "Unbekannter Fehler";
         if (msg.contains("text/html"))
@@ -320,7 +330,7 @@ public class PfSenseApiClient {
         if (msg.contains("Connection refused"))
             return "Verbindung abgelehnt – PFSENSE_BASE_URL prüfen";
         if (msg.contains("UnknownHost") || msg.contains("unknown host"))
-            return "Host nicht erreichbar – PFSENSE_BASE_URL prüfen";
+            return "Host nicht auflösbar (DNS) – PFSENSE_BASE_URL prüfen";
         if (msg.contains("URI is not absolute") || msg.contains("not absolute"))
             return "PFSENSE_BASE_URL muss mit https:// beginnen";
         return msg;
@@ -339,7 +349,7 @@ public class PfSenseApiClient {
                     .retrieve()
                     .body(Map.class);
         } catch (Exception e) {
-            log.error("pfSense fetchArpTable failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("pfSense fetchArpTable failed — {}: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new PfSenseException(humanReadable(e), e);
         }
         if (response == null) {
@@ -532,6 +542,14 @@ public class PfSenseApiClient {
                 socket.connect(new InetSocketAddress(host, port), 3000);
             }
             return new PfSenseStatusResponse("UP", System.currentTimeMillis() - start, baseUrl, null);
+        } catch (java.net.UnknownHostException e) {
+            log.warn("pfSense health check failed — DNS not resolved: {}", e.getMessage());
+            return new PfSenseStatusResponse("DOWN", null, baseUrl,
+                    "DNS-Auflösung fehlgeschlagen: Hostname \"" + e.getMessage() + "\" nicht erreichbar");
+        } catch (java.net.ConnectException e) {
+            log.warn("pfSense health check failed — connection refused: {}", e.getMessage());
+            return new PfSenseStatusResponse("DOWN", null, baseUrl,
+                    "Verbindung abgelehnt (Port geschlossen oder Firewall): " + e.getMessage());
         } catch (IOException e) {
             log.warn("pfSense health check failed: {}", e.getMessage());
             return new PfSenseStatusResponse("DOWN", null, baseUrl, e.getMessage());

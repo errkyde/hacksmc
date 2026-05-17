@@ -17,8 +17,8 @@ services:
   backend:
     image: ghcr.io/errkyde/hacksmc-backend:latest
     dns:
-      - 8.8.8.8
-      - 1.1.1.1
+      - 172.16.20.1
+      - 172.16.20.2
     environment:
       DB_HOST: postgres
       PORT_POSTGRES: 5432
